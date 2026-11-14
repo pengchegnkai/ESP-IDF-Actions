@@ -1,0 +1,2 @@
+# Default target: ESP32 (change to e.g. CONFIG_IDF_TARGET="esp32s3" as needed)
+CONFIG_IDF_TARGET="esp32"
