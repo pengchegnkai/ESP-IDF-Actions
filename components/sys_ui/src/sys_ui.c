@@ -110,6 +110,10 @@ esp_err_t sys_ui_init(void)
 #if CONFIG_IDF_TARGET_ESP32P4
     /* BSP 已完成 lv_init + 显示/触摸注册, 并自带 LVGL 任务 */
     ESP_LOGI(TAG, "ui ready (BSP lv adapter)");
+    /* 自检: 显示锁此时是否可获取 */
+    sys_ui_lock();
+    ESP_LOGI(TAG, "ui init: display lock self-test OK");
+    sys_ui_unlock();
 #else
     sys_ui_lock();
     lv_init();

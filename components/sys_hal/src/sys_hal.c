@@ -87,7 +87,9 @@ esp_err_t sys_hal_display_init(const sys_hal_display_cfg_t *cfg, sys_hal_display
 void sys_hal_display_lock(void)
 {
 #if CONFIG_IDF_TARGET_ESP32P4
-    bsp_display_lock(-1);
+    if (!bsp_display_lock(5000)) {
+        ESP_LOGE(TAG, "bsp_display_lock timeout 5s!");
+    }
 #else
     if (disp_mutex()) {
         xSemaphoreTakeRecursive(disp_mutex(), portMAX_DELAY);
