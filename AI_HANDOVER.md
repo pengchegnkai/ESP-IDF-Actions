@@ -165,7 +165,7 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
   - `LXGWWenKai-Regular.ttf`（25MB，霞鹜文楷 Regular 静态版，备用；25MB 常驻 PSRAM 后余量紧张）
 
 操作路径：手机 OTG 接卡 → 文件管理器在卡根目录建 `fonts/` 目录 → 把 `NotoSansSC.ttf` 移入 → 安全弹出、装回板子 → 重启板卡（无需重烧固件）。
-（Termux 无 root 无法直写 OTG 卡：Android 不把 OTG 卷绑进 Termux 的挂载命名空间，`termux-setup-storage` 只给内部存储权限。）
+（Termux 无 root 无法直写 OTG 卡，2026-11-15 已逐项验证：无 su/magisk（Termux 的 su 是提示性 stub）、`/dev/fuse` Permission denied、OTG 卷不在 Termux 挂载命名空间（`/mnt/runtime/{read,default}/4421-D914` 均 ENOENT，`/mnt/media_rw` 属系统命名空间）、`termux-setup-storage` 只给内部存储权限。**不要再花时间重试直写。**）
 
 ### 7.3 【一半】中文支持的两条路径验证
 
