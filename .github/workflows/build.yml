@@ -43,7 +43,9 @@ jobs:
 
       - name: Report compile errors
         if: failure()
-        run: tail -60 build_log.txt | while IFS= read -r line; do echo "::error::${line}"; done
+        run: |
+          echo "=== log size: $(wc -l < build_log.txt) lines ==="
+          grep -inE "error|failed|FAILED|killed|no space|fatal|undefined reference|ninja" build_log.txt | head -40 | while IFS= read -r line; do echo "::error::${line}"; done
 
       - name: Upload build log
         if: always()
