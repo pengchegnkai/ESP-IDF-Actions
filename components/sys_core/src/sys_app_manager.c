@@ -60,7 +60,9 @@ static esp_err_t start_foreground(sys_app_t *app)
     if (err != ESP_OK) {
         return err;
     }
+    ESP_LOGI(TAG, "calling on_start of '%s'", app->id);
     err = app->on_start ? app->on_start(app) : ESP_OK;
+    ESP_LOGI(TAG, "on_start of '%s' returned %d", app->id, (int)err);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "app '%s' on_start failed", app->id);
         return err;
