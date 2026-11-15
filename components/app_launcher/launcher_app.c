@@ -192,6 +192,19 @@ static esp_err_t build_ui(sys_app_t *app)
     return ESP_OK;
 }
 
+static esp_err_t on_init(sys_app_t *app)
+{
+    launcher_priv_t *p = calloc(1, sizeof(*p));
+    if (!p) {
+        return ESP_ERR_NO_MEM;
+    }
+    app->priv = p;
+    /* on_init 只分配私有数据; 事件订阅在 build_ui 中完成,
+       注册阶段不碰 LVGL (显示锁会与适配器任务死锁) */
+    ESP_LOGI(TAG, "launcher registered as object");
+    return ESP_OK;
+}
+
 static esp_err_t on_start(sys_app_t *app)
 {
     launcher_priv_t *p = app->priv;
