@@ -156,16 +156,21 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 2. `lv_tiny_ttf_create_data` API 签名按 LVGL 9.3 官方头文件核实过（data/size/size 三参），但没实际编译过。
 3. 中文渲染效果、字体大小观感（默认 24px）未上屏确认。
 
-### 7.2 【已下载，待用户拷卡】字库文件
+### 7.2 【已就绪，待用户拷卡】字库文件
 
-Noto Sans SC（variable font，17,772,300 字节，TTF 魔数已验证）已下载到手机 **`~/sdcard_fonts/NotoSansSC.ttf`**（走 GitHub API blob 通道，CDN 在本机不可达）。
-用户把它拷到 **SD 卡的 `fonts/` 目录**（卡需 FAT32；空卡固件会自动格式化），即 `/sdcard/fonts/NotoSansSC.ttf`。
-注意：字库 17MB 常驻 PSRAM（板载 32MB），可行但占比高——若内存吃紧可换更小的 CJK TTF（如霞鹜文楷 ~8MB）。
+两个 CJK 字库（TTF 魔数均已验证）已放在手机两处：
+- Termux 家目录：`~/sdcard_fonts/`
+- **文件管理器可见**（推荐用这个拷）：`/sdcard/Download/esp32-fonts/`
+  - `NotoSansSC.ttf`（17MB，variable font，首选）
+  - `LXGWWenKai-Regular.ttf`（25MB，霞鹜文楷 Regular 静态版，备用；25MB 常驻 PSRAM 后余量紧张）
+
+操作路径：手机 OTG 接卡 → 文件管理器在卡根目录建 `fonts/` 目录 → 把 `NotoSansSC.ttf` 移入 → 安全弹出、装回板子 → 重启板卡（无需重烧固件）。
+（Termux 无 root 无法直写 OTG 卡：Android 不把 OTG 卷绑进 Termux 的挂载命名空间，`termux-setup-storage` 只给内部存储权限。）
 
 ### 7.3 【一半】中文支持的两条路径验证
 
 - ✅ **无字库路径已验证**（build-31 `5872ca3`，2026-11-15 烧录实测）：板上有 SD 卡且挂载成功（无 "SD card unavailable" 日志），`no TTF found in /sdcard/fonts, English UI` → `UI language: en` → `launcher ui built` → `system ready`，无崩溃无看门狗；overlay 弹窗开/关与触摸 APP 切换均实测正常。
-- ⏳ **有字库路径未验证（当前卡点，等用户操作）**：用户把 `~/sdcard_fonts/NotoSansSC.ttf` 拷到 SD 卡根目录下的 `fonts/` 目录（需先建目录；卡是 FAT32，板上已有卡，需取出经读卡器/PC 拷贝后装回）→ **重启板卡（无需重烧固件）** → 抓串口确认 `CJK font loaded: ... -> Chinese UI`，重点看：中文字形是否出方块（variable font 与 stb 的兼容性）、字号观感、17MB 字库常驻 PSRAM 后的余量。若字库不生效，换静态 CJK TTF（霞鹜文楷 ~8MB 更稳）。
+- ⏳ **有字库路径未验证（当前卡点，等用户操作）**：用户经 OTG + 文件管理器把 `NotoSansSC.ttf` 从 `/sdcard/Download/esp32-fonts/` 移入 SD 卡根目录的 `fonts/` 目录（先建目录）→ 卡装回板子 → **重启板卡（无需重烧固件）** → 抓串口确认 `CJK font loaded: ... -> Chinese UI`，重点看：中文字形是否出方块（variable font 与 stb 的兼容性）、字号观感、17MB 字库常驻 PSRAM 后的余量。若 Noto 不生效，换 `LXGWWenKai-Regular.ttf`（25MB，注意 PSRAM 余量）。
 串口关键词：`ui_font:`（新模块 TAG）、`UI language:`、`CJK font`、`SD card unavailable`。
 
 ### 7.4 【已知小瑕疵】
@@ -202,6 +207,6 @@ Noto Sans SC（variable font，17,772,300 字节，TTF 魔数已验证）已下�
 
 1. ✅ CI 编译通过（build-31 `5872ca3`）。首编译报 2 类错误（块注释内 `/*` 序列 ×2、snprintf 截断），已修复。
 2. ✅ 无字库路径上板验证通过（§7.3）：英文 UI + overlay + 触摸导航正常。
-3. **有字库路径（当前卡点，等用户）**：用户把 `~/sdcard_fonts/NotoSansSC.ttf` 拷到 SD 卡 `fonts/` 目录 → 板卡重启 → 抓串口确认 `CJK font loaded ... Chinese UI` + 屏幕中文渲染（§7.3 关注点）。
+3. **有字库路径（当前卡点，等用户）**：用户 OTG 接卡 → 文件管理器把 `/sdcard/Download/esp32-fonts/NotoSansSC.ttf` 移入卡根目录 `fonts/` 目录 → 卡装回板子重启 → 抓串口确认 `CJK font loaded ... Chinese UI` + 屏幕中文渲染（§7.3 关注点）。
 4. 中文上屏 OK 后：更新本文档 §4/§7 状态，按 §7.5 排下一个功能。
 
