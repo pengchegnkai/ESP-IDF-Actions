@@ -26,7 +26,7 @@ extern "C" {
 esp_err_t sys_ui_init(void);
 
 /** LVGL 互斥锁 (生命周期回调外操作 LVGL 对象时必须持有) */
-void sys_ui_lock(void);
+bool sys_ui_lock(void);   /* 返回 false = 未获锁, 禁止执行 LVGL 操作 */
 void sys_ui_unlock(void);
 
 /**

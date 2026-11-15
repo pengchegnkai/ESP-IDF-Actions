@@ -84,16 +84,21 @@ esp_err_t sys_hal_display_init(const sys_hal_display_cfg_t *cfg, sys_hal_display
     return ESP_OK;
 }
 
-void sys_hal_display_lock(void)
+bool sys_hal_display_lock(void)
 {
 #if CONFIG_IDF_TARGET_ESP32P4
-    if (!bsp_display_lock(5000)) {
-        ESP_LOGE(TAG, "bsp_display_lock timeout 5s!");
+    /* 官方用法: bsp_display_lock(-1) 永久等待直至拿到锁
+       (返回 esp_err_t, ESP_OK=成功; 超时/失败返回非零) */
+    if (bsp_display_lock(-1) == ESP_OK) {
+        return true;
     }
+    ESP_LOGE(TAG, "bsp_display_lock failed");
+    return false;
 #else
     if (disp_mutex()) {
         xSemaphoreTakeRecursive(disp_mutex(), portMAX_DELAY);
     }
+    return true;
 #endif
 }
 

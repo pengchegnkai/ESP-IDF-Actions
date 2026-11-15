@@ -20,8 +20,9 @@ static bool      s_inited;
 static lv_obj_t *s_app_root;   /* 当前 APP 的根 screen */
 static lv_obj_t *s_overlay_bg; /* 顶层弹窗背景 (挂在 lv_layer_top) */
 
-/* ---------- 锁: 统一转发到 HAL (P4 上是 BSP 锁) ---------- */
-void sys_ui_lock(void)   { sys_hal_display_lock(); }
+/* ---------- 锁: 统一转发到 HAL (P4 上是 BSP 锁) ----------
+   返回 false = 没拿到锁, 调用方禁止执行任何 LVGL 操作 */
+bool sys_ui_lock(void)   { return sys_hal_display_lock(); }
 void sys_ui_unlock(void) { sys_hal_display_unlock(); }
 
 #if !CONFIG_IDF_TARGET_ESP32P4
@@ -110,10 +111,13 @@ esp_err_t sys_ui_init(void)
 #if CONFIG_IDF_TARGET_ESP32P4
     /* BSP 已完成 lv_init + 显示/触摸注册, 并自带 LVGL 任务 */
     ESP_LOGI(TAG, "ui ready (BSP lv adapter)");
-    /* 自检: 显示锁此时是否可获取 */
-    sys_ui_lock();
-    ESP_LOGI(TAG, "ui init: display lock self-test OK");
-    sys_ui_unlock();
+    /* 自检: 官方模式 bsp_display_lock(-1) 应在适配任务释放后立即拿到 */
+    if (sys_ui_lock()) {
+        ESP_LOGI(TAG, "ui init: display lock self-test OK");
+        sys_ui_unlock();
+    } else {
+        ESP_LOGE(TAG, "ui init: display lock self-test FAILED");
+    }
 #else
     sys_ui_lock();
     lv_init();

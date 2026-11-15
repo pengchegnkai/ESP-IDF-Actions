@@ -42,7 +42,9 @@ static void on_usb_event(int32_t event_id, void *event_data, void *user_ctx)
     if (!p || !p->usb_label) {
         return;
     }
-    sys_ui_lock();
+    if (!sys_ui_lock()) {
+        return;
+    }
     lv_label_set_text(p->usb_label,
                       event_id == SYS_EVENT_USB_IN ? "USB: 已插入" : "USB: 已拔出");
     sys_ui_unlock();
@@ -55,7 +57,9 @@ static esp_err_t build_ui(sys_app_t *app)
         return ESP_ERR_NO_MEM;
     }
     app->priv = p;
-    sys_ui_lock();
+    if (!sys_ui_lock()) {
+        return ESP_FAIL;
+    }
     p->screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x14181C), 0);
     lv_obj_set_flex_flow(p->screen, LV_FLEX_FLOW_COLUMN);

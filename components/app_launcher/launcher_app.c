@@ -93,7 +93,9 @@ static void on_time_tick(int32_t event_id, void *event_data, void *user_ctx)
         return;
     }
     uint32_t sec = sys_time_uptime_sec();
-    sys_ui_lock();
+    if (!sys_ui_lock()) {
+        return;
+    }
     lv_label_set_text_fmt(p->clock_label, "%02u:%02u:%02u",
                           (unsigned)(sec / 3600), (unsigned)(sec / 60 % 60), (unsigned)(sec % 60));
     sys_ui_unlock();
@@ -111,7 +113,9 @@ static void on_system_event(int32_t event_id, void *event_data, void *user_ctx)
         "TIME_TICK", "USB_IN", "USB_OUT", "NET_UP", "NET_DOWN", "BATTERY_LOW", "APP_STATE",
     };
     const char *nm = (event_id >= 0 && event_id <= SYS_EVENT_APP_STATE) ? names[event_id] : "?";
-    sys_ui_lock();
+    if (!sys_ui_lock()) {
+        return;
+    }
     lv_label_set_text_fmt(p->event_label, "last event: %s", nm);
     sys_ui_unlock();
 }
@@ -146,7 +150,9 @@ static void build_grid(launcher_priv_t *p)
 static esp_err_t build_ui(sys_app_t *app)
 {
     launcher_priv_t *p = app->priv;
-    sys_ui_lock();
+    if (!sys_ui_lock()) {
+        return ESP_FAIL;
+    }
     p->screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x101418), 0);
     lv_obj_set_flex_flow(p->screen, LV_FLEX_FLOW_COLUMN);
@@ -188,7 +194,7 @@ static esp_err_t build_ui(sys_app_t *app)
     sys_event_subscribe(SYS_EVENT_TIME_TICK, on_time_tick, app, &p->tick_sub);
     sys_event_subscribe(SYS_EVENT_APP_STATE, on_system_event, app, &p->state_sub);
 
-    ESP_LOGI(TAG, "launcher initialized");
+    ESP_LOGI(TAG, "launcher ui built");
     return ESP_OK;
 }
 
@@ -208,17 +214,21 @@ static esp_err_t on_init(sys_app_t *app)
 static esp_err_t on_start(sys_app_t *app)
 {
     launcher_priv_t *p = app->priv;
-    ESP_LOGI(TAG, "on_start: acquiring ui lock");
-    sys_ui_lock();
-    ESP_LOGI(TAG, "on_start: lock ok, cleaning grid");
-    lv_obj_clean(p->grid);
-    ESP_LOGI(TAG, "on_start: building grid");
+    /* UI 首次进前台才构建 (官方模式: 建对象必须在锁内) */
+    if (!p->ui_built) {
+        if (build_ui(app) != ESP_OK) {
+            return ESP_FAIL;
+        }
+        p->ui_built = true;
+    }
+    if (!sys_ui_lock()) {
+        ESP_LOGW(TAG, "on_start: no display lock, grid refresh skipped");
+        return ESP_OK;
+    }
+    lv_obj_clean(p->grid);   /* 每次进前台刷新 APP 列表 (可能新增/注销) */
     build_grid(p);
-    ESP_LOGI(TAG, "on_start: grid built, unlocking");
+    sys_ui_set_root(p->screen);  /* 必须在锁内: 屏幕切换是 LVGL 操作 */
     sys_ui_unlock();
-    ESP_LOGI(TAG, "on_start: loading screen");
-    sys_ui_set_root(p->screen);
-    ESP_LOGI(TAG, "on_start: done");
     return ESP_OK;
 }
 
@@ -236,11 +246,13 @@ static void on_stop(sys_app_t *app)
     }
     sys_event_unsubscribe(p->tick_sub);
     sys_event_unsubscribe(p->state_sub);
-    sys_ui_lock();
-    if (p->screen) {
-        lv_obj_delete(p->screen);
+    if (sys_ui_lock()) {
+        if (p->screen) {
+            lv_obj_delete(p->screen);
+        }
+        sys_ui_unlock();
     }
-    sys_ui_unlock();
+    p->ui_built = false;
     free(p);
     app->priv = NULL;
     ESP_LOGI(TAG, "launcher stopped");
