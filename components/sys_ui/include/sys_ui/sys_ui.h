@@ -84,7 +84,7 @@ typedef enum {
 #define SYS_UI_FONT_DEFAULT_PX 24
 
 /**
- * @brief 从 SD 卡 (<挂载点>/fonts/*.ttf) 加载中文字库并确定界面语言
+ * @brief 从 SD 卡字库目录 (挂载点下的 fonts 目录, 第一个 ttf 文件) 加载中文字库并确定界面语言
  * @note  必须在 sys_ui_init() 之后、任何 APP 构建 UI 之前调用;
  *        无 SD 卡/无字库时返回错误码, 系统降级为英文界面
  */

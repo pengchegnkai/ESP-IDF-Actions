@@ -7,8 +7,8 @@
  *   - 找到  → 读入 PSRAM, 用 LVGL tiny_ttf 按需渲染, 界面语言 = 中文
  *   - 找不到 → 回退 LVGL 内置字体 (Montserrat), 界面语言 = 英文
  *
- * 字库文件要求: 标准 TrueType (.ttf, glyf 轮廓), 含 CJK 字形,
- * 如 Noto Sans SC / 霞鹜文楷 等。目录约定: /sdcard/fonts/*.ttf
+ * 字库文件要求: 标准 TrueType (glyf 轮廓), 含 CJK 字形,
+ * 如 Noto Sans SC / 霞鹜文楷 等。目录约定: SD 卡根下 fonts 目录中的第一个 ttf 文件
  */
 #include <stdio.h>
 #include <string.h>
@@ -126,7 +126,7 @@ esp_err_t sys_ui_font_init(void)
     char dir[96];
     snprintf(dir, sizeof(dir), "%s/fonts", sys_hal_sd_mount_point());
 
-    char path[160] = {0};
+    char path[384] = {0};  /* dir(96) + '/' + d_name(<=255) + NUL = 353 上限 */
     DIR *d = opendir(dir);
     if (d) {
         struct dirent *e;

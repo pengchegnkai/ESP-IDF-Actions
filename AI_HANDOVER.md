@@ -156,11 +156,11 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 2. `lv_tiny_ttf_create_data` API 签名按 LVGL 9.3 官方头文件核实过（data/size/size 三参），但没实际编译过。
 3. 中文渲染效果、字体大小观感（默认 24px）未上屏确认。
 
-### 7.2 【未做】字库文件交付
+### 7.2 【已下载，待用户拷卡】字库文件
 
-给用户的 CJK TTF 文件还没下载下来（本机 CDN 全被墙/不可达）。两条路：
-- 走 GitHub API blob（可用）：`google/fonts` 仓库 `ofl/` 目录 sha=`47f0c891b62b0178e8e5af862dca44d4904834a2`，再进 `notosanssc/` 取 `NotoSansSC[wght].ttf`（~10MB，variable font，stb 可渲染默认实例）；或 `lxgw/LxgwWenKai` 的静态 TTF（~8MB）。
-- 或让用户自己拷任意含 CJK 字形的 .ttf（Noto Sans SC / 霞鹜文楷等）到 **`/sdcard/fonts/`** 目录（FAT32 卡；空卡会自动格式化）。
+Noto Sans SC（variable font，17,772,300 字节，TTF 魔数已验证）已下载到手机 **`~/sdcard_fonts/NotoSansSC.ttf`**（走 GitHub API blob 通道，CDN 在本机不可达）。
+用户把它拷到 **SD 卡的 `fonts/` 目录**（卡需 FAT32；空卡固件会自动格式化），即 `/sdcard/fonts/NotoSansSC.ttf`。
+注意：字库 17MB 常驻 PSRAM（板载 32MB），可行但占比高——若内存吃紧可换更小的 CJK TTF（如霞鹜文楷 ~8MB）。
 
 ### 7.3 【未做】中文支持的两条路径验证
 
