@@ -13,6 +13,12 @@
 #include "esp_log.h"
 
 static const char *TAG = "launcher";
+/* 前向声明: APP 对象定义在文件尾, 生命周期函数在后 */
+static esp_err_t on_init(sys_app_t *app);
+static esp_err_t on_start(sys_app_t *app);
+static void on_suspend(sys_app_t *app);
+static void on_stop(sys_app_t *app);
+
 
 typedef struct {
     lv_obj_t *screen;
