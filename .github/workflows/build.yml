@@ -41,6 +41,10 @@ jobs:
             espressif/idf:${{ env.IDF_VERSION }} \
             bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py build" 2>&1 | tee build_log.txt
 
+      - name: Report compile errors
+        if: failure()
+        run: grep -inE "error:|fatal error|FAILED" build_log.txt | head -40 | while IFS= read -r line; do echo "::error::${line}"; done
+
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
