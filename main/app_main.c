@@ -38,6 +38,11 @@ static const sys_hal_touch_cfg_t TOUCH_CFG = {
     .x_max = 480, .y_max = 800,
 };
 
+/* 音频: ES8311 扬声器 + ES7210 双麦, 官方示例默认 16kHz/2ch/16bit */
+static const sys_hal_audio_cfg_t AUDIO_CFG = {
+    .sample_rate = 16000, .channels = 2,
+};
+
 /* 板载 I2C 总线: GT911 / ES8311 / ES7210 共用 (SDA=GPIO7, SCL=GPIO8) */
 static const sys_hal_i2c_cfg_t I2C_CFG = {
     .port = 0, .scl_hz = 400000, .sda_gpio = 7, .scl_gpio = 8,
@@ -71,6 +76,14 @@ void app_main(void)
     ESP_ERROR_CHECK(sys_hal_touch_init(&TOUCH_CFG, &touch));
     if (sys_hal_i2c_init(&I2C_CFG, &i2c) != ESP_OK) {
         ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
+    }
+
+    /* 音频 (失败不阻塞启动: 无音频硬件时仍可跑 UI) */
+    sys_hal_audio_t *audio = NULL;
+    if (sys_hal_audio_init(&AUDIO_CFG, &audio) == ESP_OK) {
+        sys_hal_audio_set_volume(audio, 60);
+    } else {
+        ESP_LOGW(TAG, "audio init failed, sound disabled");
     }
 
     /* 4. UI 子系统 */

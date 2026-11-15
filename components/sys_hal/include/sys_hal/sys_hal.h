@@ -48,7 +48,23 @@ typedef struct {
     uint8_t  channels;    /**< 1 = 单声道 */
 } sys_hal_audio_cfg_t;
 
+/**
+ * @brief 初始化音频: ES8311(扬声器) + ES7210(双麦), 走 BSP + esp_codec_dev
+ * @param cfg 采样参数 (16000Hz / 2ch / 16bit 为板卡默认)
+ */
 esp_err_t sys_hal_audio_init(const sys_hal_audio_cfg_t *cfg, sys_hal_audio_t **out);
+
+/** 输出音量 0-100 */
+esp_err_t sys_hal_audio_set_volume(sys_hal_audio_t *a, int volume);
+
+/** 麦克风增益 (dB, 0-42) */
+esp_err_t sys_hal_audio_set_mic_gain(sys_hal_audio_t *a, float db);
+
+/** 播放 PCM (16bit 交错) */
+esp_err_t sys_hal_audio_play(sys_hal_audio_t *a, const void *buf, size_t len, uint32_t timeout_ms);
+
+/** 录制 PCM (16bit 交错) */
+esp_err_t sys_hal_audio_read(sys_hal_audio_t *a, void *buf, size_t len, size_t *bytes_read, uint32_t timeout_ms);
 
 /* ---------- I2C bus (供外设驱动复用) ---------- */
 typedef struct sys_hal_i2c sys_hal_i2c_t;

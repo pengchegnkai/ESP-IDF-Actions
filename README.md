@@ -13,8 +13,20 @@
 | 触摸 | GT911 电容 5 点（I2C，SDA=GPIO7 / SCL=GPIO8） |
 | 音频 | ES8311 codec + ES7210 双麦前级 |
 
-P4 目标通过官方 BSP `waveshare/esp32_p4_wifi6_touch_lcd_4_3` 完成屏幕/触摸初始化与 LVGL 适配；
-S3 / C6 目标保持 stub 实现，保证 CI 三芯片均可编译。
+P4 目标通过官方 BSP `waveshare/esp32_p4_wifi6_touch_lcd_4_3` 完成屏幕/触摸初始化与 LVGL 适配，
+并通过 `esp_codec_dev` 驱动 ES8311/ES7210 音频；I2C 使用 IDF `i2c_master` 新驱动。
+S3 / C6 目标显示/触摸/音频保持 stub 实现，保证 CI 三芯片均可编译。
+
+音频用法（官方示例同款 API）:
+
+```c
+sys_hal_audio_t *audio = NULL;
+sys_hal_audio_cfg_t cfg = { .sample_rate = 16000, .channels = 2 };
+sys_hal_audio_init(&cfg, &audio);
+sys_hal_audio_set_volume(audio, 60);
+sys_hal_audio_play(audio, pcm_buf, pcm_len, 1000);   /* 播放 */
+sys_hal_audio_read(audio, buf, len, &read, 1000);    /* 录音 */
+```
 
 ## 目录结构
 
@@ -47,7 +59,13 @@ components/
 | `sys_ui_switch_to(app_id)` | 屏幕切换（等价 `sys_app_launch`） |
 | `sys_ui_overlay_show/dismiss` | 系统级顶层弹窗，永远压在所有 APP 之上 |
 | `sys_ui_lock/unlock` | LVGL 上下文锁（P4 上即 BSP 锁） |
-| `sys_hal_*` | 显示/触摸/音频/I2C 抽象，换板只改 `sys_hal.c` |
+| `sys_hal_display_init` | BSP 启动 MIPI-DSI + ST7701，开背光，注册 GT911 触摸 |
+| `sys_hal_display_lock/unlock` | 显示上下文锁（P4 上即 `bsp_display_lock`，LVGL 操作必须持锁） |
+| `sys_hal_audio_init` | ES8311 扬声器 + ES7210 双麦（BSP + esp_codec_dev，16kHz/2ch/16bit） |
+| `sys_hal_audio_play/read` | PCM 播放 / 录音 |
+| `sys_hal_audio_set_volume/set_mic_gain` | 音量 0-100 / 麦克风增益 dB |
+| `sys_hal_i2c_init` | 复用 BSP 已有总线，否则用 `i2c_new_master_bus` 新建 |
+| `sys_hal_i2c_write_reg/read_reg` | 7 位地址寄存器读写（GT911/ES8311/ES7210） |
 
 ## 系统事件
 
