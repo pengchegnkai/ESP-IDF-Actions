@@ -106,3 +106,19 @@ esp_err_t sys_event_publish(int32_t event_id, void *event_data)
     return esp_event_post_to(s_loop, SYS_EVENT, event_id,
                              &event_data, sizeof(void *), 0);
 }
+
+/* ---------- 系统事件源辅助 ---------- */
+void sys_event_report_usb(bool inserted)
+{
+    sys_event_publish(inserted ? SYS_EVENT_USB_IN : SYS_EVENT_USB_OUT, NULL);
+}
+
+void sys_event_report_net(bool connected)
+{
+    sys_event_publish(connected ? SYS_EVENT_NET_UP : SYS_EVENT_NET_DOWN, NULL);
+}
+
+void sys_event_report_battery(int percent)
+{
+    sys_event_publish(SYS_EVENT_BATTERY_LOW, percent <= 10 ? &percent : NULL);
+}

@@ -36,6 +36,19 @@ sys_app_t *sys_app_current(void);
 /** @brief 按 ID 查找已注册的 APP (未注册返回 NULL) */
 sys_app_t *sys_app_find(const char *app_id);
 
+/**
+ * @brief 返回上一个 APP (返回键语义): 挂起当前, 恢复栈顶 APP
+ * @note  栈空返回 ESP_ERR_NOT_FOUND; 系统 APP 自行决定是否响应返回键
+ */
+esp_err_t sys_app_back(void);
+
+/** @brief 停止指定 APP: 若为前台先挂起, 然后回调 on_stop 并置 STOPPED */
+esp_err_t sys_app_stop(const char *app_id);
+
+/** @brief 已注册 APP 数量 / 按索引枚举 (供 Launcher 生成网格) */
+size_t     sys_app_count(void);
+sys_app_t *sys_app_get(size_t index);
+
 #ifdef __cplusplus
 }
 #endif

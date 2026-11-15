@@ -62,6 +62,10 @@ typedef struct {
 
 esp_err_t sys_hal_i2c_init(const sys_hal_i2c_cfg_t *cfg, sys_hal_i2c_t **out);
 
+/* ---------- Display 互斥 (LVGL 上下文锁, 由 HAL 决定底层实现) ---------- */
+void sys_hal_display_lock(void);
+void sys_hal_display_unlock(void);
+
 /** I2C 寄存器读写 (7 位地址) */
 esp_err_t sys_hal_i2c_write_reg(sys_hal_i2c_t *bus, uint8_t addr,
                                 uint8_t reg, const uint8_t *data, size_t len);

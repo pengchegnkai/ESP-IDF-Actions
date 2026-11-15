@@ -20,7 +20,9 @@
 #include "sys_core/sys_app_manager.h"
 #include "sys_hal/sys_hal.h"
 #include "sys_ui/sys_ui.h"
+#include "sys_core/sys_time_service.h"
 #include "app_launcher/launcher_app.h"
+#include "app_settings/app_settings.h"
 
 static const char *TAG = "main";
 
@@ -34,6 +36,11 @@ static const sys_hal_display_cfg_t DISPLAY_CFG = {
 
 static const sys_hal_touch_cfg_t TOUCH_CFG = {
     .x_max = 480, .y_max = 800,
+};
+
+/* 板载 I2C 总线: GT911 / ES8311 / ES7210 共用 (SDA=GPIO7, SCL=GPIO8) */
+static const sys_hal_i2c_cfg_t I2C_CFG = {
+    .port = 0, .scl_hz = 400000, .sda_gpio = 7, .scl_gpio = 8,
 };
 
 static void init_nvs(void)
@@ -59,16 +66,24 @@ void app_main(void)
     /* 3. 硬件抽象层 (stub, 待板卡驱动接入) */
     sys_hal_display_t *display = NULL;
     sys_hal_touch_t   *touch   = NULL;
+    sys_hal_i2c_t     *i2c     = NULL;
     ESP_ERROR_CHECK(sys_hal_display_init(&DISPLAY_CFG, &display));
     ESP_ERROR_CHECK(sys_hal_touch_init(&TOUCH_CFG, &touch));
+    if (sys_hal_i2c_init(&I2C_CFG, &i2c) != ESP_OK) {
+        ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
+    }
 
     /* 4. UI 子系统 */
     ESP_ERROR_CHECK(sys_ui_init());
 
-    /* 5. 注册 APP (后续新 APP 在这里追加) */
-    ESP_ERROR_CHECK(sys_app_register(launcher_app_get()));
+    /* 5. 系统时间服务 (1Hz TIME_TICK) */
+    ESP_ERROR_CHECK(sys_time_service_init());
 
-    /* 6. 启动默认桌面 */
+    /* 6. 注册 APP (后续新 APP 在这里追加) */
+    ESP_ERROR_CHECK(sys_app_register(launcher_app_get()));
+    ESP_ERROR_CHECK(sys_app_register(settings_app_get()));
+
+    /* 7. 启动默认桌面 */
     ESP_ERROR_CHECK(sys_app_launch(LAUNCHER_APP_ID));
 
     ESP_LOGI(TAG, "system ready, foreground app: %s",

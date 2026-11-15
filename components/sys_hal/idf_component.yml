@@ -1,0 +1,7 @@
+## 微雪 ESP32-P4-WIFI6-Touch-LCD-4.3 官方 BSP (含 ST7701 面板 + GT911 触摸 + LVGL 适配)
+## 仅 P4 目标拉取; S3/C6 目标构建时自动跳过
+dependencies:
+  waveshare/esp32_p4_wifi6_touch_lcd_4_3:
+    version: "^1.0.1"
+    rules:
+      - if: "target == esp32p4"

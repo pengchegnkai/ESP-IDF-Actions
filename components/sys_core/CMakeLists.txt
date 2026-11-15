@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "src/sys_event_bus.c" "src/sys_app_manager.c"
+    SRCS "src/sys_event_bus.c" "src/sys_app_manager.c" "src/sys_time_service.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_event
+    REQUIRES esp_event esp_timer
 )

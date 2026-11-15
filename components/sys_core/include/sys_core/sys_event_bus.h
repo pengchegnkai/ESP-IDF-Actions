@@ -9,6 +9,7 @@
 
 #include <esp_err.h>
 #include <esp_event.h>
+#include <stdbool.h>
 #include "sys_core/sys_app.h"
 
 #ifdef __cplusplus
@@ -59,6 +60,11 @@ esp_err_t sys_event_unsubscribe(sys_event_handle_t handle);
 
 /** 发布事件 (异步); 无数据传 NULL */
 esp_err_t sys_event_publish(int32_t event_id, void *event_data);
+
+/* ---- 系统事件源辅助 (供 HAL/服务层在状态变化时调用) ---- */
+void sys_event_report_usb(bool inserted);
+void sys_event_report_net(bool connected);
+void sys_event_report_battery(int percent);   /**< <=10% 时同时发布 BATTERY_LOW */
 
 #ifdef __cplusplus
 }
