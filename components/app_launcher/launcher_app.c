@@ -30,12 +30,6 @@ static void overlay_ok_cb(lv_event_t *e)
     sys_ui_overlay_dismiss();
 }
 
-static void demo_btn_cb(lv_event_t *e)
-{
-    (void)e;
-    show_demo_overlay();
-}
-
 static void show_demo_overlay(void)
 {
     if (sys_ui_overlay_active()) {
@@ -65,6 +59,12 @@ static void show_demo_overlay(void)
     if (err != ESP_OK) {
         lv_obj_delete(content); /* 已有弹窗时回收本次内容 */
     }
+}
+
+static void demo_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    show_demo_overlay();
 }
 
 /* ---------- APP 图标点击: 切换前台 ---------- */

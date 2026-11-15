@@ -60,11 +60,11 @@ esp_err_t sys_hal_display_init(const sys_hal_display_cfg_t *cfg, sys_hal_display
         .tear_avoid_mode  = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_PARTIAL,
         .touch_flags      = { .swap_xy = 0, .mirror_x = 0, .mirror_y = 0 },
     };
-    esp_err_t err = bsp_display_start_with_config(&bsp_cfg);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "bsp_display_start_with_config failed: %s", esp_err_to_name(err));
+    lv_display_t *disp = bsp_display_start_with_config(&bsp_cfg); /* 返回 LVGL 显示对象 */
+    if (!disp) {
+        ESP_LOGE(TAG, "bsp_display_start_with_config failed");
         free(d);
-        return err;
+        return ESP_FAIL;
     }
     bsp_display_backlight_on();
     ESP_LOGI(TAG, "display ready (BSP): %ux%u ST7701 MIPI-DSI", (unsigned)cfg->h_res, (unsigned)cfg->v_res);
