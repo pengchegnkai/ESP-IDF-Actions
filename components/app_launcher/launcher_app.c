@@ -2,6 +2,7 @@
  * @file launcher_app.c
  * @brief Launcher 实现 —— 演示标准生命周期 + 事件订阅 + UI 屏幕挂载
  */
+#include <stdlib.h>
 #include "app_launcher/launcher_app.h"
 #include "sys_core/sys_app_manager.h"
 #include "sys_core/sys_event_bus.h"

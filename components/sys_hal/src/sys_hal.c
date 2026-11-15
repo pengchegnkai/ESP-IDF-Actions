@@ -7,6 +7,7 @@
  * 上层代码依赖本头文件, 因此换板只改本文件, 应用零改动。
  */
 #include <string.h>
+#include <stdlib.h>
 #include "sys_hal/sys_hal.h"
 #include "esp_log.h"
 

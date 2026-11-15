@@ -5,18 +5,32 @@ on:
     branches: [ main, master ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      target:
+        description: '目标芯片 (只编译选中的这一款)'
+        required: true
+        default: 'esp32p4'
+        type: choice
+        options:
+          - esp32p4
+          - esp32c6
+          - esp32s3
 
 env:
   # ESP-IDF 版本，改这一处即可（如 v5.4、v5.5.1、release/v5.5）
   IDF_VERSION: v6.1
+  # push / PR 时默认只编译主控芯片
+  DEFAULT_TARGET: esp32p4
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        target: [ esp32s3, esp32c6, esp32p4 ]
+        # 手动触发: 编译用户选择的芯片; push/PR: 只编译默认主控芯片
+        target: ${{ github.event_name == 'workflow_dispatch'
+                    && fromJSON(format('["{0}"]', inputs.target))
+                    || fromJSON(format('["{0}"]', env.DEFAULT_TARGET)) }}
 
     steps:
       - uses: actions/checkout@v4
