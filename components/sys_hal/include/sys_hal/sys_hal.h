@@ -80,6 +80,15 @@ esp_err_t sys_hal_i2c_init(const sys_hal_i2c_cfg_t *cfg, sys_hal_i2c_t **out);
 
 /* ---------- Display 互斥 (LVGL 上下文锁, 由 HAL 决定底层实现) ---------- */
 bool sys_hal_display_lock(void);   /* false = 未获锁 */
+
+/**
+ * @brief 挂载 SD 卡 (P4: BSP 原生 SDIO + FAT VFS; 其他目标: 不支持)
+ * @return ESP_OK 成功; 无卡/未格式化返回错误码 (不致命, 上层降级处理)
+ */
+esp_err_t sys_hal_sd_mount(void);
+
+/** SD 卡 VFS 挂载点 (P4 默认 "/sdcard", 可经 CONFIG_BSP_SD_MOUNT_POINT 修改) */
+const char *sys_hal_sd_mount_point(void);
 void sys_hal_display_unlock(void);
 
 /** I2C 寄存器读写 (7 位地址) */

@@ -113,6 +113,26 @@ void sys_hal_display_unlock(void)
 #endif
 }
 
+/* ========================= SD Storage ========================= */
+esp_err_t sys_hal_sd_mount(void)
+{
+#if CONFIG_IDF_TARGET_ESP32P4
+    /* BSP 内置: 原生 SDIO 4-bit + FAT VFS, 挂载到 BSP_SD_MOUNT_POINT */
+    return bsp_sdcard_mount();
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+const char *sys_hal_sd_mount_point(void)
+{
+#if CONFIG_IDF_TARGET_ESP32P4
+    return BSP_SD_MOUNT_POINT;
+#else
+    return "/sdcard";
+#endif
+}
+
 /* ========================= Touch ========================= */
 struct sys_hal_touch {
     sys_hal_touch_cfg_t cfg;

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "app_launcher/launcher_app.h"
+#include "app_settings/app_settings.h"
 #include "sys_core/sys_app_manager.h"
 #include "sys_core/sys_event_bus.h"
 #include "sys_core/sys_time_service.h"
@@ -48,18 +49,23 @@ static void show_demo_overlay(void)
     lv_obj_set_flex_align(content, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_radius(content, 12, 0);
     lv_obj_set_style_bg_color(content, lv_color_hex(0x232A31), 0);
+    /* 顶层图层不在任何屏幕之下, 中文字体需显式设置 */
+    lv_font_t *f = sys_ui_cjk_font(SYS_UI_FONT_DEFAULT_PX);
+    if (f) {
+        lv_obj_set_style_text_font(content, f, LV_STATE_DEFAULT);
+    }
 
     lv_obj_t *title = lv_label_create(content);
-    lv_label_set_text(title, LV_SYMBOL_WARNING "  安全警告");
+    lv_label_set_text(title, sys_ui_str(SYS_UI_STR_OVERLAY_TITLE));
     lv_obj_set_style_text_color(title, lv_color_hex(0xFF6B6B), 0);
 
     lv_obj_t *body = lv_label_create(content);
-    lv_label_set_text(body, "这是一个系统级弹窗\n永远显示在所有 APP 之上");
+    lv_label_set_text(body, sys_ui_str(SYS_UI_STR_OVERLAY_BODY));
 
     lv_obj_t *btn = lv_button_create(content);
     lv_obj_add_event_cb(btn, overlay_ok_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *btn_label = lv_label_create(btn);
-    lv_label_set_text(btn_label, "知道了");
+    lv_label_set_text(btn_label, sys_ui_str(SYS_UI_STR_OVERLAY_OK));
     lv_obj_center(btn_label);
 
     esp_err_t err = sys_ui_overlay_show(content, NULL);
@@ -116,11 +122,23 @@ static void on_system_event(int32_t event_id, void *event_data, void *user_ctx)
     if (!sys_ui_lock()) {
         return;
     }
-    lv_label_set_text_fmt(p->event_label, "last event: %s", nm);
+    lv_label_set_text_fmt(p->event_label, "%s: %s", sys_ui_str(SYS_UI_STR_LAST_EVENT), nm);
     sys_ui_unlock();
 }
 
 /* ---------- 生命周期 ---------- */
+/* APP 显示名: 已知 APP 走 i18n, 未知 APP 回退 name 字段 */
+static const char *app_display_name(const sys_app_t *app)
+{
+    if (strcmp(app->id, LAUNCHER_APP_ID) == 0) {
+        return sys_ui_str(SYS_UI_STR_APP_LAUNCHER);
+    }
+    if (strcmp(app->id, SETTINGS_APP_ID) == 0) {
+        return sys_ui_str(SYS_UI_STR_APP_SETTINGS);
+    }
+    return app->name ? app->name : app->id;
+}
+
 static void build_grid(launcher_priv_t *p)
 {
     for (size_t i = 0; i < sys_app_count(); i++) {
@@ -133,7 +151,7 @@ static void build_grid(launcher_priv_t *p)
         lv_obj_set_style_bg_color(btn, lv_color_hex(0x2C6E9B), 0);
         lv_obj_add_event_cb(btn, app_btn_cb, LV_EVENT_CLICKED, (void *)app->id);
         lv_obj_t *label = lv_label_create(btn);
-        lv_label_set_text(label, app->name ? app->name : app->id);
+        lv_label_set_text(label, app_display_name(app));
         lv_obj_center(label);
     }
 
@@ -143,7 +161,7 @@ static void build_grid(launcher_priv_t *p)
     lv_obj_set_style_bg_color(demo, lv_color_hex(0x8A5A00), 0);
     lv_obj_add_event_cb(demo, demo_btn_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *demo_label = lv_label_create(demo);
-    lv_label_set_text(demo_label, LV_SYMBOL_WARNING " 弹窗演示");
+    lv_label_set_text(demo_label, sys_ui_str(SYS_UI_STR_BTN_DEMO));
     lv_obj_center(demo_label);
 }
 
@@ -166,7 +184,7 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *title = lv_label_create(bar);
-    lv_label_set_text(title, "System Base");
+    lv_label_set_text(title, sys_ui_str(SYS_UI_STR_SYSTEM_BASE_TITLE));
     lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0E0), 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, 0);
 
@@ -186,7 +204,7 @@ static esp_err_t build_ui(sys_app_t *app)
 
     /* 事件提示 */
     p->event_label = lv_label_create(p->screen);
-    lv_label_set_text(p->event_label, "last event: -");
+    lv_label_set_text_fmt(p->event_label, "%s: -", sys_ui_str(SYS_UI_STR_LAST_EVENT));
     lv_obj_set_style_text_color(p->event_label, lv_color_hex(0x7EC8E3), 0);
     sys_ui_unlock();
 

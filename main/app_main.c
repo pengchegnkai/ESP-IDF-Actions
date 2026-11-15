@@ -91,9 +91,19 @@ void app_main(void)
         ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
     }
 
+    /* 3.5 SD 卡 (中文字库/资源); 无卡不致命, 界面降级为英文 */
+    if (sys_hal_sd_mount() != ESP_OK) {
+        ESP_LOGW(TAG, "SD card unavailable -> English UI (CJK TTF goes to /sdcard/fonts/)");
+    }
 
     /* 4. UI 子系统 */
     ESP_ERROR_CHECK(sys_ui_init());
+
+    /* 4.5 字库: 从 SD 卡加载中文字体并确定界面语言 (必须在 APP 建 UI 前) */
+    if (sys_ui_font_init() != ESP_OK) {
+        ESP_LOGW(TAG, "no CJK font on SD card -> English UI");
+    }
+    ESP_LOGI(TAG, "UI language: %s", sys_ui_lang() == SYS_UI_LANG_ZH ? "zh" : "en");
 
     /* 5. 系统时间服务 (1Hz TIME_TICK) */
     ESP_ERROR_CHECK(sys_time_service_init());

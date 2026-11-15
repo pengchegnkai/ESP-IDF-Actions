@@ -1,0 +1,5 @@
+# ESP32-P4 专属配置 (仅 target=esp32p4 时生效)
+#
+# SD 卡挂载失败(空卡/未格式化)时自动 FAT 格式化, 免去手动格式化
+# (该选项来自微雪 BSP 的 Kconfig, 其他芯片目标没有此选项)
+CONFIG_BSP_SD_FORMAT_ON_MOUNT_FAIL=y

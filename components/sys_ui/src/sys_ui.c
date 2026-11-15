@@ -52,6 +52,12 @@ void sys_ui_set_root(lv_obj_t *screen)
 {
     s_app_root = screen;
     if (screen) {
+        /* 中文模式: 屏幕根对象设中文字体, 其下所有控件继承
+           (新屏幕不继承旧屏幕的样式, 所以每次 set_root 都要重设) */
+        lv_font_t *f = sys_ui_cjk_font(SYS_UI_FONT_DEFAULT_PX);
+        if (f) {
+            lv_obj_set_style_text_font(screen, f, LV_STATE_DEFAULT);
+        }
         lv_screen_load_anim(screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
     }
 }

@@ -46,7 +46,8 @@ static void on_usb_event(int32_t event_id, void *event_data, void *user_ctx)
         return;
     }
     lv_label_set_text(p->usb_label,
-                      event_id == SYS_EVENT_USB_IN ? "USB: 已插入" : "USB: 已拔出");
+                      event_id == SYS_EVENT_USB_IN ? sys_ui_str(SYS_UI_STR_USB_IN)
+                                                   : sys_ui_str(SYS_UI_STR_USB_OUT));
     sys_ui_unlock();
 }
 
@@ -67,24 +68,24 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_set_style_pad_row(p->screen, 16, 0);
 
     lv_obj_t *title = lv_label_create(p->screen);
-    lv_label_set_text(title, LV_SYMBOL_SETTINGS "  设置");
+    lv_label_set_text(title, sys_ui_str(SYS_UI_STR_APP_SETTINGS));
     lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0E0), 0);
 
     /* 一个开关控件, 演示 LVGL 控件使用 */
     lv_obj_t *sw = lv_switch_create(p->screen);
     lv_obj_set_width(sw, 70);
     lv_obj_t *sw_label = lv_label_create(p->screen);
-    lv_label_set_text(sw_label, "示例开关 (Wi-Fi 开关占位)");
+    lv_label_set_text(sw_label, sys_ui_str(SYS_UI_STR_SWITCH_LABEL));
     lv_obj_set_style_text_color(sw_label, lv_color_hex(0x9AA5B1), 0);
 
     p->usb_label = lv_label_create(p->screen);
-    lv_label_set_text(p->usb_label, "USB: -");
+    lv_label_set_text(p->usb_label, sys_ui_str(SYS_UI_STR_USB_OUT));
     lv_obj_set_style_text_color(p->usb_label, lv_color_hex(0x7EC8E3), 0);
 
     lv_obj_t *back = lv_button_create(p->screen);
     lv_obj_add_event_cb(back, back_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *back_label = lv_label_create(back);
-    lv_label_set_text(back_label, LV_SYMBOL_LEFT "  返回");
+    lv_label_set_text(back_label, sys_ui_str(SYS_UI_STR_BTN_BACK));
     lv_obj_center(back_label);
     sys_ui_unlock();
     ESP_LOGI(TAG, "settings ui built");
