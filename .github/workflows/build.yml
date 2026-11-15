@@ -43,7 +43,7 @@ jobs:
 
       - name: Report compile errors
         if: failure()
-        run: grep -inE "error:|fatal error|FAILED" build_log.txt | head -40 | while IFS= read -r line; do echo "::error::${line}"; done
+        run: tail -60 build_log.txt | while IFS= read -r line; do echo "::error::${line}"; done
 
       - name: Upload build log
         if: always()
