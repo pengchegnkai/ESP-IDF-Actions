@@ -1,27 +1,38 @@
-# esp-idf-gh-actions-demo
+# ESP32-P4 System Base
 
-最小 ESP-IDF 示例项目，使用 GitHub Actions 云端编译，无需本地安装 ESP-IDF。
+基于 **ESP32-P4（主控）+ ESP32-C6（协处理器）** 开发板的通用系统基座，纯底层框架，不含具体业务。
 
-## 使用方法
+## 架构
 
-1. 在 GitHub 上新建一个仓库，把本目录内容推上去：
+```
+main/app_main.c            启动流程: NVS -> 事件总线 -> HAL -> UI -> 注册 APP -> 启动 Launcher
+components/
+├── sys_core/              系统内核
+│   ├── sys_app.h          APP 接口规范 (生命周期: init/start/suspend/stop)
+│   ├── sys_app_manager.*  APP 调度器 (注册/启动/前台切换)
+│   └── sys_event_bus.*    全局事件总线 (esp_event 封装, 发布/订阅)
+├── sys_hal/               硬件抽象层 (屏幕/触摸/音频/I2C, 当前为 stub, 换板只改这里)
+├── sys_ui/                UI 框架 (LVGL v9 心跳任务/屏幕切换/顶层弹窗 Overlay)
+└── app_launcher/          Launcher 桌面 APP (新 APP 的参考模板)
+```
 
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: ESP-IDF GitHub Actions demo"
-   git branch -M main
-   git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-   git push -u origin main
-   ```
+## 关键 API
 
-2. 推送后进入仓库的 **Actions** 页面，工作流 `Build ESP-IDF` 会自动开始编译。
+| API | 说明 |
+|---|---|
+| `sys_app_register(app)` | 注册 APP, 回调 `on_init` |
+| `sys_app_launch("launcher")` | 启动/切换 APP: 自动挂起当前前台 APP |
+| `sys_event_subscribe / publish` | 订阅/发布系统事件 (USB、网络、电量、心跳等) |
+| `sys_ui_switch_to(app_id)` | 屏幕切换 (转发到调度器) |
+| `sys_ui_overlay_show / dismiss` | 系统级顶层弹窗, 永远压在所有 APP 之上 |
 
-3. 编译完成后，在对应运行记录的 **Artifacts** 里下载 `firmware-esp32`（含 .bin/.elf 等）。
+## 新增一个 APP 的步骤
 
-## 调整配置
+1. `components/` 下新建组件, 静态定义一个 `sys_app_t`, 填写 4 个生命周期回调;
+2. 在 `app_main.c` 中 `sys_app_register()` 注册;
+3. UI 在 `on_init` 创建根屏幕, 在 `on_start` 调 `sys_ui_set_root()` 挂载。
 
-- **ESP-IDF 版本**：改 `.github/workflows/build.yml` 顶部的 `IDF_VERSION`。
-- **目标芯片**：改 `matrix.target`（如 `esp32s3`、`esp32c3`），并同时改 `sdkconfig.defaults` 里的 `CONFIG_IDF_TARGET`。
+## CI
 
-工作流使用官方动作 `espressif/esp-idf-ci-action@v1`，在 GitHub 托管的 Ubuntu 运行器上执行 `idf.py build`。
+GitHub Actions (`.github/workflows/build.yml`) 对 `esp32p4` / `esp32c6` / `esp32s3` 三个目标自动编译,
+产物在运行页 Artifacts 下载。LVGL 通过 managed component 自动拉取。

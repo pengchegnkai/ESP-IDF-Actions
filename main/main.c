@@ -1,6 +1,0 @@
-#include <stdio.h>
-
-void app_main(void)
-{
-    printf("Hello from ESP-IDF built on GitHub Actions!\n");
-}
