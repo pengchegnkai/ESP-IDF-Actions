@@ -39,7 +39,7 @@ jobs:
           docker run --rm -v "$PWD":/project -w /project \
             -e IDF_TARGET=${{ matrix.target }} \
             espressif/idf:${{ env.IDF_VERSION }} \
-            bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py build" 2>&1 | tee build_log.txt
+            bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py build && idf.py merge-bin" 2>&1 | tee build_log.txt
 
       - name: Report compile errors
         if: failure()
@@ -53,6 +53,14 @@ jobs:
         with:
           name: build-log-${{ matrix.target }}
           path: build_log.txt
+
+      - name: Upload merged flash image
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-flash-${{ matrix.target }}
+          path: build/merged-binary.bin
+          if-no-files-found: error
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
