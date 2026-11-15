@@ -313,6 +313,15 @@ esp_err_t sys_hal_i2c_init(const sys_hal_i2c_cfg_t *cfg, sys_hal_i2c_t **out)
     }
     b->cfg = *cfg;
 
+#if CONFIG_IDF_TARGET_ESP32P4
+    /* P4: BSP 独占 GPIO7/8 的 I2C 总线 (GT911/ES8311/ES7210),
+       绝对不能再在同样引脚上建第二个总线 —— 会把触摸轮询搞挂,
+       导致 LVGL 适配任务持锁卡死, 整个 UI 体系瘫痪 */
+    b->bus = bsp_i2c_get_handle();
+    if (!b->bus) {
+        ESP_LOGE(TAG, "BSP i2c bus not ready (display not init?)");
+    }
+#else
     /* 优先复用 BSP 已经创建的同端口总线 (触摸/Codec 都在上面) */
     if (i2c_master_get_bus_handle((i2c_port_num_t)cfg->port, &b->bus) != ESP_OK) {
         i2c_master_bus_config_t bus_cfg = {
@@ -330,6 +339,7 @@ esp_err_t sys_hal_i2c_init(const sys_hal_i2c_cfg_t *cfg, sys_hal_i2c_t **out)
             b->bus = NULL;
         }
     }
+#endif
     ESP_LOGI(TAG, "i2c ready: port%u sda=%d scl=%d%s",
              (unsigned)cfg->port, cfg->sda_gpio, cfg->scl_gpio,
              b->bus ? "" : " (degraded)");
