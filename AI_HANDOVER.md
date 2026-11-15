@@ -134,7 +134,7 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 
 ## 7. 未完成项（哪些还没搞完 —— 接手重点）
 
-### 7.1 【进行中】SD 卡字库中文支持 —— 代码已全部写完，**未编译、未烧录、未验证**
+### 7.1 【进行中】SD 卡字库中文支持 —— 编译通过（build-31 `5872ca3`）、无字库路径实测 OK，**有字库中文上屏未验证**
 
 设计：启动时扫描 `/sdcard/fonts/*.ttf`（第一个）→ 读入 PSRAM → LVGL 9.3 `lv_tiny_ttf_create_data()` 按需渲染（stb_truetype 流式，不吃整文件内存）→ 中文 UI；无 SD 卡/无字库 → 英文 UI（内置 Montserrat）。语言由字库可用性自动决定，无需手动切换。
 
@@ -151,7 +151,7 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 | `sdkconfig.defaults` | `CONFIG_LV_USE_TINY_TTF=y` |
 | `sdkconfig.defaults.esp32p4` | **新文件**：`CONFIG_BSP_SD_FORMAT_ON_MOUNT_FAIL=y`（空卡自动 FAT 格式化） |
 
-**未验证风险点（CI 大概率先炸这里）**：
+**历史风险点（build-31 首编译已验证：前两点均排除——include 级联与 API 签名都通过；首编译实际报的是注释 `/*` 序列与 snprintf 截断，已修）**：
 1. `lv_tiny_ttf.h` 的 include 路径——用 `__has_include` 级联兼容三种布局（`libs/tiny_ttf/...` / `src/libs/tiny_ttf/...` / 裸名），都不中会 `#error`。可查 lvgl 仓库 `CMakeLists.txt` 的 `INCLUDE_DIRS` 确认。
 2. `lv_tiny_ttf_create_data` API 签名按 LVGL 9.3 官方头文件核实过（data/size/size 三参），但没实际编译过。
 3. 中文渲染效果、字体大小观感（默认 24px）未上屏确认。
@@ -162,12 +162,11 @@ Noto Sans SC（variable font，17,772,300 字节，TTF 魔数已验证）已下�
 用户把它拷到 **SD 卡的 `fonts/` 目录**（卡需 FAT32；空卡固件会自动格式化），即 `/sdcard/fonts/NotoSansSC.ttf`。
 注意：字库 17MB 常驻 PSRAM（板载 32MB），可行但占比高——若内存吃紧可换更小的 CJK TTF（如霞鹜文楷 ~8MB）。
 
-### 7.3 【未做】中文支持的两条路径验证
+### 7.3 【一半】中文支持的两条路径验证
 
-CI 编译 → 下载固件 → 烧录 → 抓串口，验证：
-- 无字库路径：日志 `no TTF found in /sdcard/fonts, English UI` + 屏幕英文界面正常；
-- 有字库路径：日志 `CJK font loaded: ... -> Chinese UI` + 屏幕中文渲染正常（重点看：中文字形是否出方块、字号观感、触摸导航仍正常）。
-串口关键词：`ui_font:`（新模块 TAG）、`UI language:`、`CJK font`。
+- ✅ **无字库路径已验证**（build-31 `5872ca3`，2026-11-15 烧录实测）：板上有 SD 卡且挂载成功（无 "SD card unavailable" 日志），`no TTF found in /sdcard/fonts, English UI` → `UI language: en` → `launcher ui built` → `system ready`，无崩溃无看门狗；overlay 弹窗开/关与触摸 APP 切换均实测正常。
+- ⏳ **有字库路径未验证（当前卡点，等用户操作）**：用户把 `~/sdcard_fonts/NotoSansSC.ttf` 拷到 SD 卡根目录下的 `fonts/` 目录（需先建目录；卡是 FAT32，板上已有卡，需取出经读卡器/PC 拷贝后装回）→ **重启板卡（无需重烧固件）** → 抓串口确认 `CJK font loaded: ... -> Chinese UI`，重点看：中文字形是否出方块（variable font 与 stb 的兼容性）、字号观感、17MB 字库常驻 PSRAM 后的余量。若字库不生效，换静态 CJK TTF（霞鹜文楷 ~8MB 更稳）。
+串口关键词：`ui_font:`（新模块 TAG）、`UI language:`、`CJK font`、`SD card unavailable`。
 
 ### 7.4 【已知小瑕疵】
 
@@ -201,9 +200,8 @@ CI 编译 → 下载固件 → 烧录 → 抓串口，验证：
 
 ## 10. 下一步行动清单（按顺序）
 
-1. **CI 编译中文支持代码**：push 后轮询 `actions/runs`。若挂：优先查 `lv_tiny_ttf.h` include（§7.1 风险 1），查 lvgl 仓库 `CMakeLists.txt` 的 `INCLUDE_DIRS`；其次查 API 签名。修完重推。
-2. **下载固件**（§6.2 资产端点）→ `python3 flasher.py` 烧录。
-3. **无字库路径验证**：§7.3。
-4. **交付字库**（§7.2）→ 用户拷卡 → **有字库路径验证**：§7.3。
-5. 中文上屏 OK 后：更新本文档 §4/§7 状态，按 §7.5 排下一个功能。
+1. ✅ CI 编译通过（build-31 `5872ca3`）。首编译报 2 类错误（块注释内 `/*` 序列 ×2、snprintf 截断），已修复。
+2. ✅ 无字库路径上板验证通过（§7.3）：英文 UI + overlay + 触摸导航正常。
+3. **有字库路径（当前卡点，等用户）**：用户把 `~/sdcard_fonts/NotoSansSC.ttf` 拷到 SD 卡 `fonts/` 目录 → 板卡重启 → 抓串口确认 `CJK font loaded ... Chinese UI` + 屏幕中文渲染（§7.3 关注点）。
+4. 中文上屏 OK 后：更新本文档 §4/§7 状态，按 §7.5 排下一个功能。
 
