@@ -1,5 +1,8 @@
 name: Build ESP-IDF
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main, master ]
@@ -61,6 +64,15 @@ jobs:
           name: merged-flash-${{ matrix.target }}
           path: build/merged-binary.bin
           if-no-files-found: error
+
+      - name: Publish release asset
+        if: success() && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }} (${{ matrix.target }})
+          files: build/merged-binary.bin
+          fail_on_unmatched_files: true
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
