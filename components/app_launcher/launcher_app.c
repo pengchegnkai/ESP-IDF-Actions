@@ -193,11 +193,17 @@ static esp_err_t on_init(sys_app_t *app)
 static esp_err_t on_start(sys_app_t *app)
 {
     launcher_priv_t *p = app->priv;
+    ESP_LOGI(TAG, "on_start: acquiring ui lock");
     sys_ui_lock();
-    lv_obj_clean(p->grid);   /* 每次进前台刷新 APP 列表 (可能新增/注销) */
+    ESP_LOGI(TAG, "on_start: lock ok, cleaning grid");
+    lv_obj_clean(p->grid);
+    ESP_LOGI(TAG, "on_start: building grid");
     build_grid(p);
+    ESP_LOGI(TAG, "on_start: grid built, unlocking");
     sys_ui_unlock();
+    ESP_LOGI(TAG, "on_start: loading screen");
     sys_ui_set_root(p->screen);
+    ESP_LOGI(TAG, "on_start: done");
     return ESP_OK;
 }
 
