@@ -16,6 +16,8 @@ typedef struct {
     lv_obj_t *screen;
     lv_obj_t *clock_label;
     lv_obj_t *event_label;
+    sys_event_handle_t tick_sub;
+    sys_event_handle_t state_sub;
 } launcher_priv_t;
 
 /* ---------- 事件总线回调 (运行在 sys_evt 任务上下文) ---------- */
@@ -73,9 +75,8 @@ static esp_err_t on_init(sys_app_t *app)
     sys_ui_unlock();
 
     /* 订阅系统事件: handler 的 user_ctx 传回 APP 自己 */
-    esp_event_handler_t h;
-    sys_event_subscribe(SYS_EVENT_TIME_TICK, on_time_tick, app, &h);
-    sys_event_subscribe(SYS_EVENT_APP_STATE, on_system_event, app, &h);
+    sys_event_subscribe(SYS_EVENT_TIME_TICK, on_time_tick, app, &p->tick_sub);
+    sys_event_subscribe(SYS_EVENT_APP_STATE, on_system_event, app, &p->state_sub);
 
     ESP_LOGI(TAG, "launcher initialized");
     return ESP_OK;
@@ -97,8 +98,8 @@ static void on_suspend(sys_app_t *app)
 static void on_stop(sys_app_t *app)
 {
     launcher_priv_t *p = app->priv;
-    sys_event_unsubscribe(SYS_EVENT_TIME_TICK, (esp_event_handler_t)on_time_tick);
-    sys_event_unsubscribe(SYS_EVENT_APP_STATE, (esp_event_handler_t)on_system_event);
+    sys_event_unsubscribe(p->tick_sub);
+    sys_event_unsubscribe(p->state_sub);
     free(p);
     app->priv = NULL;
     ESP_LOGI(TAG, "launcher stopped");

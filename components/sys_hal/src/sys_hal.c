@@ -30,7 +30,7 @@ esp_err_t sys_hal_display_init(const sys_hal_display_cfg_t *cfg, sys_hal_display
     }
     d->cfg = *cfg;
     /* TODO(board): 按目标板初始化 MIPI-DSI / RGB / SPI 显示面板 */
-    ESP_LOGI(TAG, "display stub %ux%u", cfg->h_res, cfg->v_res);
+    ESP_LOGI(TAG, "display stub %ux%u", (unsigned)cfg->h_res, (unsigned)cfg->v_res);
     *out = d;
     return ESP_OK;
 }
@@ -51,7 +51,7 @@ esp_err_t sys_hal_touch_init(const sys_hal_touch_cfg_t *cfg, sys_hal_touch_t **o
     }
     t->cfg = *cfg;
     /* TODO(board): 按目标板初始化电容触摸控制器 */
-    ESP_LOGI(TAG, "touch stub %ux%u", cfg->x_max, cfg->y_max);
+    ESP_LOGI(TAG, "touch stub %ux%u", (unsigned)cfg->x_max, (unsigned)cfg->y_max);
     *out = t;
     return ESP_OK;
 }
@@ -81,7 +81,7 @@ esp_err_t sys_hal_audio_init(const sys_hal_audio_cfg_t *cfg, sys_hal_audio_t **o
     }
     a->cfg = *cfg;
     /* TODO(board): 初始化 I2S + codec */
-    ESP_LOGI(TAG, "audio stub %luHz x%u ch", (unsigned long)cfg->sample_rate, cfg->channels);
+    ESP_LOGI(TAG, "audio stub %luHz x%u ch", (unsigned long)cfg->sample_rate, (unsigned)cfg->channels);
     *out = a;
     return ESP_OK;
 }
@@ -103,7 +103,7 @@ esp_err_t sys_hal_i2c_init(const sys_hal_i2c_cfg_t *cfg, sys_hal_i2c_t **out)
     }
     b->cfg = *cfg;
     /* TODO(board): i2c_new_master_bus(...) */
-    ESP_LOGI(TAG, "i2c stub port%u sda=%d scl=%d", cfg->port, cfg->sda_gpio, cfg->scl_gpio);
+    ESP_LOGI(TAG, "i2c stub port%u sda=%d scl=%d", (unsigned)cfg->port, cfg->sda_gpio, cfg->scl_gpio);
     *out = b;
     return ESP_OK;
 }

@@ -1,6 +1,9 @@
 /**
  * @file sys_event_bus.h
  * @brief 全局事件总线 —— 基于 esp_event 的系统级发布/订阅封装
+ *
+ * 订阅者只需关心 (event_id, event_data, user_ctx) 三个参数,
+ * 由总线内部适配器屏蔽 esp_event 的 base/循环细节。
  */
 #pragma once
 
@@ -32,31 +35,29 @@ typedef struct {
     sys_app_state_t new_state;
 } sys_app_state_evt_t;
 
+/** 订阅回调: 运行在事件循环任务上下文, 不要阻塞 */
 typedef void (*sys_event_handler_t)(int32_t event_id, void *event_data, void *user_ctx);
 
-/**
- * @brief 初始化事件总线(内部创建 esp_event loop)
- * @note  必须最先调用, 早于其他子系统
- */
+/** 订阅句柄 (内部槽位, 取消订阅时原样传回) */
+typedef const void *sys_event_handle_t;
+
+/** 初始化事件总线(内部创建 esp_event loop), 必须最先调用 */
 esp_err_t sys_event_bus_init(void);
 
 /**
  * @brief 订阅事件
- * @param handler 回调运行在事件循环任务上下文, 不要阻塞
- * @param out_handle 返回句柄, 传给 sys_event_unsubscribe 使用
+ * @param handler 回调 (event_id, event_data, user_ctx)
+ * @param out_handle 返回订阅句柄
  */
 esp_err_t sys_event_subscribe(int32_t event_id,
                               sys_event_handler_t handler,
                               void *user_ctx,
-                              esp_event_handler_t *out_handle);
+                              sys_event_handle_t *out_handle);
 
-/** 取消订阅 */
-esp_err_t sys_event_unsubscribe(int32_t event_id, esp_event_handler_t handle);
+/** 取消订阅 (参数为 sys_event_subscribe 返回的句柄) */
+esp_err_t sys_event_unsubscribe(sys_event_handle_t handle);
 
-/**
- * @brief 发布事件 (异步, 拷贝 event_data 浅层指针)
- * @note  指针指向的数据在回调完成前必须保持有效; 无数据传 NULL
- */
+/** 发布事件 (异步); 无数据传 NULL */
 esp_err_t sys_event_publish(int32_t event_id, void *event_data);
 
 #ifdef __cplusplus
