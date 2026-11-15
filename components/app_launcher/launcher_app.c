@@ -19,6 +19,7 @@ typedef struct {
     lv_obj_t *clock_label;
     lv_obj_t *event_label;
     lv_obj_t *grid;
+    bool ui_built;
     sys_event_handle_t tick_sub;
     sys_event_handle_t state_sub;
 } launcher_priv_t;
@@ -136,14 +137,9 @@ static void build_grid(launcher_priv_t *p)
     lv_obj_center(demo_label);
 }
 
-static esp_err_t on_init(sys_app_t *app)
+static esp_err_t build_ui(sys_app_t *app)
 {
-    launcher_priv_t *p = calloc(1, sizeof(*p));
-    if (!p) {
-        return ESP_ERR_NO_MEM;
-    }
-    app->priv = p;
-
+    launcher_priv_t *p = app->priv;
     sys_ui_lock();
     p->screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x101418), 0);

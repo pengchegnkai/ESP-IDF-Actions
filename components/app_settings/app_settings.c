@@ -15,6 +15,7 @@ static const char *TAG = "settings";
 typedef struct {
     lv_obj_t *screen;
     lv_obj_t *usb_label;
+    bool ui_built;
     sys_event_handle_t usb_in_sub;
     sys_event_handle_t usb_out_sub;
 } settings_priv_t;
@@ -41,17 +42,14 @@ static void on_usb_event(int32_t event_id, void *event_data, void *user_ctx)
     sys_ui_unlock();
 }
 
-static esp_err_t on_init(sys_app_t *app)
+static esp_err_t build_ui(sys_app_t *app)
 {
-    ESP_LOGI(TAG, "settings on_init: enter");
-    settings_priv_t *p = calloc(1, sizeof(*p));
+    settings_priv_t *p = app->priv;
     if (!p) {
         return ESP_ERR_NO_MEM;
     }
     app->priv = p;
-    ESP_LOGI(TAG, "settings on_init: ui lock");
     sys_ui_lock();
-    ESP_LOGI(TAG, "settings on_init: building ui");
     p->screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x14181C), 0);
     lv_obj_set_flex_flow(p->screen, LV_FLEX_FLOW_COLUMN);
@@ -79,7 +77,18 @@ static esp_err_t on_init(sys_app_t *app)
     lv_label_set_text(back_label, LV_SYMBOL_LEFT "  返回");
     lv_obj_center(back_label);
     sys_ui_unlock();
-    ESP_LOGI(TAG, "settings on_init: ui built");
+    ESP_LOGI(TAG, "settings ui built");
+    return ESP_OK;
+}
+
+static esp_err_t on_init(sys_app_t *app)
+{
+    ESP_LOGI(TAG, "settings on_init: enter");
+    settings_priv_t *p = calloc(1, sizeof(*p));
+    if (!p) {
+        return ESP_ERR_NO_MEM;
+    }
+    app->priv = p;
 
     sys_event_subscribe(SYS_EVENT_USB_IN, on_usb_event, app, &p->usb_in_sub);
     sys_event_subscribe(SYS_EVENT_USB_OUT, on_usb_event, app, &p->usb_out_sub);
@@ -91,6 +100,10 @@ static esp_err_t on_init(sys_app_t *app)
 static esp_err_t on_start(sys_app_t *app)
 {
     settings_priv_t *p = app->priv;
+    if (!p->ui_built) {
+        build_ui(app);
+        p->ui_built = true;
+    }
     sys_ui_set_root(p->screen);
     return ESP_OK;
 }
