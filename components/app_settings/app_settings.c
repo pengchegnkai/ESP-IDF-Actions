@@ -43,13 +43,15 @@ static void on_usb_event(int32_t event_id, void *event_data, void *user_ctx)
 
 static esp_err_t on_init(sys_app_t *app)
 {
+    ESP_LOGI(TAG, "settings on_init: enter");
     settings_priv_t *p = calloc(1, sizeof(*p));
     if (!p) {
         return ESP_ERR_NO_MEM;
     }
     app->priv = p;
-
+    ESP_LOGI(TAG, "settings on_init: ui lock");
     sys_ui_lock();
+    ESP_LOGI(TAG, "settings on_init: building ui");
     p->screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x14181C), 0);
     lv_obj_set_flex_flow(p->screen, LV_FLEX_FLOW_COLUMN);
@@ -77,6 +79,7 @@ static esp_err_t on_init(sys_app_t *app)
     lv_label_set_text(back_label, LV_SYMBOL_LEFT "  返回");
     lv_obj_center(back_label);
     sys_ui_unlock();
+    ESP_LOGI(TAG, "settings on_init: ui built");
 
     sys_event_subscribe(SYS_EVENT_USB_IN, on_usb_event, app, &p->usb_in_sub);
     sys_event_subscribe(SYS_EVENT_USB_OUT, on_usb_event, app, &p->usb_out_sub);

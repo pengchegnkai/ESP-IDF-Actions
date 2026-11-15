@@ -99,9 +99,14 @@ void app_main(void)
     ESP_ERROR_CHECK(sys_time_service_init());
 
     /* 6. 注册 APP (后续新 APP 在这里追加) */
+    ESP_LOGI(TAG, "register launcher");
     ESP_ERROR_CHECK(sys_app_register(launcher_app_get()));
+    ESP_LOGI(TAG, "launcher registered");
+    ESP_LOGI(TAG, "register settings");
     ESP_ERROR_CHECK(sys_app_register(settings_app_get()));
+    ESP_LOGI(TAG, "settings registered");
 
+    ESP_LOGI(TAG, "launching default app");
     /* 7. 启动默认桌面 */
     ESP_ERROR_CHECK(sys_app_launch(LAUNCHER_APP_ID));
 
