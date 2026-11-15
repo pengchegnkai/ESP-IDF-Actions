@@ -1,6 +1,8 @@
 # 目标芯片由 CI 工作流的 matrix 指定 (idf.py set-target 语义)
 #
 # ESP32-P4 (微雪 ESP32-P4-WIFI6-Touch-LCD-4.3):
-#   屏幕/触摸/PSRAM/Flash 等由 BSP 组件 (waveshare/esp32_p4_wifi6_touch_lcd_4_3)
-#   的 sdkconfig 默认值提供, 无需在此重复声明。
-#   如需手动覆盖, 在此追加 CONFIG_xxx=y 即可。
+#   封装内 32MB PSRAM —— LVGL/DPI 面板缓冲必须放这里, 不开会 ESP_ERR_NO_MEM
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_HEX=y
+CONFIG_SPIRAM_SPEED_200M=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
