@@ -48,6 +48,19 @@ static const sys_hal_i2c_cfg_t I2C_CFG = {
     .port = 0, .scl_hz = 400000, .sda_gpio = 7, .scl_gpio = 8,
 };
 
+/* 音频初始化放后台任务: 某些板卡 I2S/codec 初始化可能阻塞, 不能挡住 UI 启动 */
+static void audio_boot_task(void *arg)
+{
+    (void)arg;
+    sys_hal_audio_t *audio = NULL;
+    if (sys_hal_audio_init(&AUDIO_CFG, &audio) == ESP_OK) {
+        sys_hal_audio_set_volume(audio, 60);
+    } else {
+        ESP_LOGW(TAG, "audio init failed, sound disabled");
+    }
+    vTaskDelete(NULL);
+}
+
 static void init_nvs(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -78,13 +91,6 @@ void app_main(void)
         ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
     }
 
-    /* 音频 (失败不阻塞启动: 无音频硬件时仍可跑 UI) */
-    sys_hal_audio_t *audio = NULL;
-    if (sys_hal_audio_init(&AUDIO_CFG, &audio) == ESP_OK) {
-        sys_hal_audio_set_volume(audio, 60);
-    } else {
-        ESP_LOGW(TAG, "audio init failed, sound disabled");
-    }
 
     /* 4. UI 子系统 */
     ESP_ERROR_CHECK(sys_ui_init());
@@ -98,6 +104,9 @@ void app_main(void)
 
     /* 7. 启动默认桌面 */
     ESP_ERROR_CHECK(sys_app_launch(LAUNCHER_APP_ID));
+
+    /* 音频在后台异步初始化, 不阻塞 UI */
+    xTaskCreate(audio_boot_task, "audio_boot", 6144, NULL, 4, NULL);
 
     ESP_LOGI(TAG, "system ready, foreground app: %s",
              sys_app_current() ? sys_app_current()->id : "(none)");
