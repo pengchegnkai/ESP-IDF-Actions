@@ -6,6 +6,7 @@
 
 #include <esp_err.h>
 #include <esp_event.h>
+#include "sys_core/sys_app.h"
 
 #ifdef __cplusplus
 extern "C" {

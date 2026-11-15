@@ -24,13 +24,16 @@
 
 static const char *TAG = "main";
 
-/* 目标板卡显示参数 —— 换板时只改这里的配置值 */
+/* 目标板卡: 微雪 ESP32-P4-WIFI6-Touch-LCD-4.3
+ * LCD: 4.3" IPS 480x800 (竖屏原生), MIPI-DSI 2-lane, 驱动 ST7701
+ * 触摸: GT911 电容 5 点 (I2C), I2S 音频: ES8311 + ES7210
+ * 换板时只改这里的配置值 */
 static const sys_hal_display_cfg_t DISPLAY_CFG = {
-    .h_res = 1024, .v_res = 600, .refresh_hz = 60,
+    .h_res = 480, .v_res = 800, .refresh_hz = 60,
 };
 
 static const sys_hal_touch_cfg_t TOUCH_CFG = {
-    .x_max = 1024, .y_max = 600,
+    .x_max = 480, .y_max = 800,
 };
 
 static void init_nvs(void)
