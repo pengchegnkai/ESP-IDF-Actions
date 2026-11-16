@@ -20,3 +20,7 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # flash 32MB (官方示例同款; BSP 默认只给 2MB, 装不下 2M factory 分区)
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+
+# LVGL 内置分配器池: 默认 64KB 不够中文字形缓存 (128 字形×~1.3KB≈166KB + 对象树),
+# 字形 malloc 失败会触发 stbtt assert 重启。扩到 512KB (单块 >16KB 自动落 PSRAM)
+CONFIG_LV_MEM_SIZE_KILOBYTES=512
