@@ -246,7 +246,7 @@ esp_err_t sys_hal_audio_init(const sys_hal_audio_cfg_t *cfg, sys_hal_audio_t **o
     return ESP_OK;
 }
 
-esp_err_t sys_hal_audio_get(void)
+sys_hal_audio_t *sys_hal_audio_get(void)
 {
     return s_audio;
 }

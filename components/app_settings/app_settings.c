@@ -79,7 +79,8 @@ static void vol_cb(lv_event_t *e)
 static void sfx_cb(lv_event_t *e)
 {
     (void)e;
-    bool on = lv_switch_get_state(lv_event_get_target_obj(e));
+    /* LVGL 9: switch 继承 checkbox, 状态 = LV_STATE_CHECKED */
+    bool on = lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED);
     sys_settings_set_sfx(on);
     if (on) {
         sys_hal_audio_beep(880, 120); /* 打开时试听 */
@@ -192,7 +193,9 @@ static esp_err_t build_ui(sys_app_t *app)
     p->sfx_switch = lv_switch_create(sfx_row);
     bool sfx = true;
     sys_settings_get_sfx(&sfx);
-    lv_switch_set_state(p->sfx_switch, sfx, LV_ANIM_OFF);
+    if (sfx) {
+        lv_obj_add_state(p->sfx_switch, LV_STATE_CHECKED);
+    }
     lv_obj_align(p->sfx_switch, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_add_event_cb(p->sfx_switch, sfx_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
