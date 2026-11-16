@@ -1,14 +1,17 @@
 /**
  * @file app_main.c
- * @brief 系统启动流程 —— 硬件 -> 事件总线 -> UI -> 默认 APP
+ * @brief 系统启动流程 —— 显示优先, 启动画面掩盖上电白屏
  *
  * 初始化顺序 (有依赖, 不可乱):
- *   1. NVS           非易失存储 (WiFi/校准数据等依赖)
- *   2. 事件总线      其他子系统都会发布/订阅
- *   3. 硬件抽象层    屏幕/触摸/音频/I2C
- *   4. UI 子系统     LVGL 渲染任务
- *   5. 注册所有 APP
- *   6. 启动默认 APP (Launcher)
+ *   1. NVS + 用户设置     非易失存储
+ *   2. 事件总线 + 调度器  其余子系统依赖
+ *   3. 显示 + LVGL        屏幕点亮, 渲染任务启动
+ *   4. 注册 APP + 启动画面 (内置字体, 不依赖 SD 卡) —— 白屏到此被盖住
+ *   5. 触摸/I2C/SD/字库   耗时初始化, 期间启动画面持续渲染
+ *   6. splash_set_ready   启动画面短暂停留后切入 Launcher
+ *
+ * 关键: 显示/LVGL/启动画面必须在字库加载 (读 SD 数秒) 之前,
+ *       否则上电后看到的是白屏而不是启动画面。
  */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -83,56 +86,58 @@ void app_main(void)
     init_nvs();
     ESP_ERROR_CHECK(sys_settings_init());
 
-    /* 2. 事件总线 (最先建立, 其余子系统依赖) */
+    /* 2. 事件总线 (最先建立, 其余子系统依赖) + APP 调度器 (跨任务互斥) */
     ESP_ERROR_CHECK(sys_event_bus_init());
-    /* 2.5 APP 调度器 (跨任务互斥) */
     ESP_ERROR_CHECK(sys_app_manager_init());
 
-    /* 3. 硬件抽象层 (stub, 待板卡驱动接入) */
+    /* 3. 显示优先: 点亮屏幕 + 启动 LVGL 渲染任务。
+     *    必须在 SD/字库加载之前 —— 字库要读几秒, 期间屏幕已点亮,
+     *    由启动画面 (内置字体) 盖住白屏 */
     sys_hal_display_t *display = NULL;
-    sys_hal_touch_t   *touch   = NULL;
-    sys_hal_i2c_t     *i2c     = NULL;
     ESP_ERROR_CHECK(sys_hal_display_init(&DISPLAY_CFG, &display));
-    ESP_ERROR_CHECK(sys_hal_touch_init(&TOUCH_CFG, &touch));
-    if (sys_hal_i2c_init(&I2C_CFG, &i2c) != ESP_OK) {
-        ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
-    }
+    ESP_ERROR_CHECK(sys_ui_init());
 
-    /* 恢复上次亮度 */
+    /* 恢复上次亮度 (启动画面即以正确亮度显示) */
     int bright = 100;
     sys_settings_get_brightness(&bright);
     sys_hal_display_set_brightness(bright);
 
-    /* 3.5 SD 卡 (中文字库/资源); 无卡不致命, 界面降级为英文 */
-    if (sys_hal_sd_mount() != ESP_OK) {
-        ESP_LOGW(TAG, "SD card unavailable -> English UI (CJK TTF goes to /sdcard/fonts/)");
-    }
-
-    /* 4. UI 子系统 */
-    ESP_ERROR_CHECK(sys_ui_init());
-
-    /* 4.5 字库: 从 SD 卡加载中文字体并确定界面语言 (必须在 APP 建 UI 前) */
-    if (sys_ui_font_init() != ESP_OK) {
-        ESP_LOGW(TAG, "no CJK font on SD card -> English UI");
-    }
-    ESP_LOGI(TAG, "UI language: %s", sys_ui_lang() == SYS_UI_LANG_ZH ? "zh" : "en");
-
-    /* 5. 系统时间服务 (1Hz TIME_TICK) */
+    /* 4. 时间服务 (1Hz TIME_TICK) + 注册 APP (后续新 APP 在这里追加;
+     *    on_init 不碰 LVGL, 字库未加载也安全) */
     ESP_ERROR_CHECK(sys_time_service_init());
-
-    /* 6. 注册 APP (后续新 APP 在这里追加) */
     ESP_ERROR_CHECK(sys_app_register(splash_app_get()));
     ESP_ERROR_CHECK(sys_app_register(launcher_app_get()));
     ESP_ERROR_CHECK(sys_app_register(settings_app_get()));
     ESP_LOGI(TAG, "%u apps registered", (unsigned)sys_app_count());
 
-    ESP_LOGI(TAG, "launching splash");
-    /* 7. 启动画面 (数秒后自动切入 Launcher) */
+    /* 5. 立即进入启动画面 (内置字体, 不依赖 SD 卡) —— 白屏到此被盖住 */
     ESP_ERROR_CHECK(sys_app_launch(SPLASH_APP_ID));
+
+    /* 6. 其余硬件 (LVGL 任务独立, 不阻塞启动画面渲染) */
+    sys_hal_touch_t *touch = NULL;
+    sys_hal_i2c_t   *i2c   = NULL;
+    ESP_ERROR_CHECK(sys_hal_touch_init(&TOUCH_CFG, &touch));
+    if (sys_hal_i2c_init(&I2C_CFG, &i2c) != ESP_OK) {
+        ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
+    }
+
+    /* 7. SD 卡 (中文字库/资源); 无卡不致命, 界面降级为英文 */
+    if (sys_hal_sd_mount() != ESP_OK) {
+        ESP_LOGW(TAG, "SD card unavailable -> English UI (CJK TTF goes to /sdcard/fonts/)");
+    }
+
+    /* 8. 字库: 读入约 17MB 需数秒, 期间启动画面持续渲染;
+     *    加载完成后 splash 自动升级中文, ready 后切入桌面 */
+    if (sys_ui_font_init() != ESP_OK) {
+        ESP_LOGW(TAG, "no CJK font on SD card -> English UI");
+    }
+    ESP_LOGI(TAG, "UI language: %s", sys_ui_lang() == SYS_UI_LANG_ZH ? "zh" : "en");
 
     /* 音频在后台异步初始化, 不阻塞 UI */
     xTaskCreate(audio_boot_task, "audio_boot", 6144, NULL, 4, NULL);
 
+    /* 9. 系统就绪: 启动画面进度条充满, 短暂停留后切入桌面 */
+    splash_set_ready();
     ESP_LOGI(TAG, "system ready, foreground app: %s",
              sys_app_current() ? sys_app_current()->id : "(none)");
 }

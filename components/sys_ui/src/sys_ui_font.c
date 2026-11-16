@@ -197,8 +197,16 @@ esp_err_t sys_ui_font_init(void)
     }
     s_ttf_size = (size_t)sz;
 
-    /* 3. 预建默认字号 (兼作 TTF 合法性验证), 结果存入缓存槽 0 */
+    /* 3. 预建默认字号 (兼作 TTF 合法性验证), 结果存入缓存槽 0
+     *    LVGL 字体对象创建走 lv_malloc, 必须持显示锁与 LVGL 渲染任务互斥
+     *    (新启动顺序下渲染任务此时已在跑, 启动画面正在刷新) */
+    if (!sys_ui_lock()) {
+        heap_caps_free(s_ttf_buf);
+        s_ttf_buf = NULL;
+        return ESP_FAIL;
+    }
     s_fonts[0] = lv_tiny_ttf_create_data(s_ttf_buf, s_ttf_size, SYS_UI_FONT_DEFAULT_PX);
+    sys_ui_unlock();
     if (!s_fonts[0]) {
         ESP_LOGE(TAG, "invalid TTF: %s", path);
         heap_caps_free(s_ttf_buf);
