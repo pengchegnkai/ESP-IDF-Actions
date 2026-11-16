@@ -17,3 +17,6 @@ CONFIG_LV_FONT_MONTSERRAT_48=y
 # 自定义分区表: factory 扩到 2M (IDF 默认 single_app 仅 1M, 固件已 ~1.07MB)
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# flash 32MB (官方示例同款; BSP 默认只给 2MB, 装不下 2M factory 分区)
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
