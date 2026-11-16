@@ -75,7 +75,7 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_set_style_text_color(brand, lv_color_hex(0xE0E0E0), 0);
     lv_font_t *bf = sys_ui_cjk_font(48);
     if (!bf) {
-        bf = lv_font_montserrat_48;
+        bf = &lv_font_montserrat_48; /* LVGL9 字体宏是 const 对象, 取地址 */
     }
     lv_obj_set_style_text_font(brand, bf, 0);
     lv_obj_align(brand, LV_ALIGN_CENTER, 0, -140);
