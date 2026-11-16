@@ -13,3 +13,7 @@ CONFIG_LV_USE_TINY_TTF=y
 # 启动画面品牌大字 (内置 Montserrat 48px; 中文模式下用 TTF 字体渲染)
 # 注意: 字体 Kconfig 符号不带 USE_ 前缀 (库选项才带, 如 LV_USE_TINY_TTF)
 CONFIG_LV_FONT_MONTSERRAT_48=y
+
+# 自定义分区表: factory 扩到 2M (IDF 默认 single_app 仅 1M, 固件已 ~1.07MB)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
