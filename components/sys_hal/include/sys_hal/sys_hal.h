@@ -27,6 +27,12 @@ typedef struct {
 
 esp_err_t sys_hal_display_init(const sys_hal_display_cfg_t *cfg, sys_hal_display_t **out);
 
+/** 背光亮度 0-100 (P4: BSP LEDC PWM; 其他目标: 不支持) */
+esp_err_t sys_hal_display_set_brightness(int percent);
+
+/** 当前亮度 0-100 */
+esp_err_t sys_hal_display_get_brightness(int *percent);
+
 /* ---------- Touch ---------- */
 typedef struct sys_hal_touch sys_hal_touch_t;
 
@@ -65,6 +71,16 @@ esp_err_t sys_hal_audio_play(sys_hal_audio_t *a, const void *buf, size_t len, ui
 
 /** 录制 PCM (16bit 交错) */
 esp_err_t sys_hal_audio_read(sys_hal_audio_t *a, void *buf, size_t len, size_t *bytes_read, uint32_t timeout_ms);
+
+/** 系统音频句柄 (init 成功后可用; 未初始化返回 NULL) */
+sys_hal_audio_t *sys_hal_audio_get(void);
+
+/**
+ * @brief 播放短音效 (正弦波 + 起音/释音包络, 非阻塞: 内部任务播放)
+ * @param freq_hz 频率 100-8000
+ * @param duration_ms 时长 20-500
+ */
+esp_err_t sys_hal_audio_beep(uint32_t freq_hz, uint32_t duration_ms);
 
 /* ---------- I2C bus (供外设驱动复用) ---------- */
 typedef struct sys_hal_i2c sys_hal_i2c_t;

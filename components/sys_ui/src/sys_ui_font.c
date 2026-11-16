@@ -60,6 +60,16 @@ static const char *const s_str_zh[SYS_UI_STR_COUNT] = {
     [SYS_UI_STR_USB_IN]            = "USB: 已插入",
     [SYS_UI_STR_USB_OUT]           = "USB: 已拔出",
     [SYS_UI_STR_SWITCH_LABEL]      = "演示开关",
+    [SYS_UI_STR_SPLASH_SUBTITLE]   = "系统基座",
+    [SYS_UI_STR_SPLASH_STARTING]   = "正在启动...",
+    [SYS_UI_STR_SET_BRIGHTNESS]    = "亮度",
+    [SYS_UI_STR_SET_VOLUME]        = "音量",
+    [SYS_UI_STR_SET_SFX]           = "按键音效",
+    [SYS_UI_STR_SET_INFO]          = "系统信息",
+    [SYS_UI_STR_SET_PSRAM]         = "内存",
+    [SYS_UI_STR_SET_UPTIME]        = "运行时间",
+    [SYS_UI_STR_SET_LANG]          = "语言",
+    [SYS_UI_STR_SET_FONT]          = "字库",
 };
 
 static const char *const s_str_en[SYS_UI_STR_COUNT] = {
@@ -75,6 +85,16 @@ static const char *const s_str_en[SYS_UI_STR_COUNT] = {
     [SYS_UI_STR_USB_IN]            = "USB: connected",
     [SYS_UI_STR_USB_OUT]           = "USB: disconnected",
     [SYS_UI_STR_SWITCH_LABEL]      = "Demo switch",
+    [SYS_UI_STR_SPLASH_SUBTITLE]   = "System Base",
+    [SYS_UI_STR_SPLASH_STARTING]   = "Starting up...",
+    [SYS_UI_STR_SET_BRIGHTNESS]    = "Brightness",
+    [SYS_UI_STR_SET_VOLUME]        = "Volume",
+    [SYS_UI_STR_SET_SFX]           = "Key sound",
+    [SYS_UI_STR_SET_INFO]          = "System info",
+    [SYS_UI_STR_SET_PSRAM]         = "Memory",
+    [SYS_UI_STR_SET_UPTIME]        = "Uptime",
+    [SYS_UI_STR_SET_LANG]          = "Language",
+    [SYS_UI_STR_SET_FONT]          = "Font",
 };
 
 sys_ui_lang_t sys_ui_lang(void)

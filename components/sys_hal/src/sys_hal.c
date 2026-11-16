@@ -14,6 +14,8 @@
 #include "sys_hal/sys_hal.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
+#include <math.h>
 
 #if CONFIG_IDF_TARGET_ESP32P4
 #include "bsp/esp-bsp.h"
@@ -171,6 +173,10 @@ esp_err_t sys_hal_touch_read(sys_hal_touch_t *t, uint16_t *x, uint16_t *y, bool 
 }
 
 /* ========================= Audio ========================= */
+/* 系统级单例: init 成功后供全局 API (亮度/音频句柄/音效) 使用 */
+static sys_hal_audio_t *s_audio;
+static int s_brightness = 100;
+
 struct sys_hal_audio {
     sys_hal_audio_cfg_t cfg;
 #if CONFIG_IDF_TARGET_ESP32P4
@@ -236,7 +242,13 @@ esp_err_t sys_hal_audio_init(const sys_hal_audio_cfg_t *cfg, sys_hal_audio_t **o
 #endif
 
     *out = a;
+    s_audio = a;
     return ESP_OK;
+}
+
+esp_err_t sys_hal_audio_get(void)
+{
+    return s_audio;
 }
 
 esp_err_t sys_hal_audio_set_volume(sys_hal_audio_t *a, int volume)
@@ -432,4 +444,117 @@ esp_err_t sys_hal_i2c_read_reg(sys_hal_i2c_t *bus, uint8_t addr,
     err = i2c_master_transmit_receive(dev, &reg, 1, data, len, I2C_TIMEOUT_MS);
     i2c_master_bus_rm_device(dev);
     return err;
+}
+
+/* ---------- 背光亮度 ---------- */
+esp_err_t sys_hal_display_set_brightness(int percent)
+{
+    if (percent < 0) {
+        percent = 0;
+    }
+    if (percent > 100) {
+        percent = 100;
+    }
+#if CONFIG_IDF_TARGET_ESP32P4
+    esp_err_t err = bsp_display_brightness_set(percent);
+    if (err == ESP_OK) {
+        s_brightness = percent;
+    }
+    return err;
+#else
+    (void)percent;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+esp_err_t sys_hal_display_get_brightness(int *percent)
+{
+    if (!percent) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *percent = s_brightness;
+    return ESP_OK;
+}
+
+/* ---------- 短音效 (beep): 正弦波 + 线性起音/释音包络 ---------- */
+typedef struct {
+    uint16_t freq_hz;
+    uint16_t dur_ms;
+} beep_req_t;
+
+static void beep_task(void *arg)
+{
+    beep_req_t *req = arg;
+#if CONFIG_IDF_TARGET_ESP32P4
+    if (s_audio && s_audio->speaker) {
+        uint32_t rate = s_audio->cfg.sample_rate ? s_audio->cfg.sample_rate : 16000;
+        uint32_t ch   = s_audio->cfg.channels ? s_audio->cfg.channels : 2;
+        size_t frames = (size_t)rate * req->dur_ms / 1000;
+        size_t bytes  = frames * ch * 2;
+        int16_t *pcm = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);
+        if (!pcm) {
+            pcm = malloc(bytes); /* PSRAM 不足时退回内部 RAM */
+        }
+        if (pcm) {
+            /* 包络: 两端各 5% 线性升降, 防咔哒声 */
+            uint32_t env = rate * req->dur_ms / 20000;
+            if (env < 16) {
+                env = 16;
+            }
+            for (size_t i = 0; i < frames; i++) {
+                int32_t amp = 12000; /* ~44% 满幅 */
+                if (i < env) {
+                    amp = (int32_t)((int64_t)amp * i / env);
+                } else if (i > frames - env) {
+                    amp = (int32_t)((int64_t)amp * (frames - i) / env);
+                }
+                int16_t s = (int16_t)(amp *
+                    sinf((float)(2.0 * 3.14159265 * (double)req->freq_hz * i / rate)));
+                for (uint32_t c = 0; c < ch; c++) {
+                    pcm[i * ch + c] = s;
+                }
+            }
+            sys_hal_audio_play(s_audio, pcm, bytes, 0);
+        }
+        heap_caps_free(pcm);
+    }
+#endif
+    free(req);
+    vTaskDelete(NULL);
+}
+
+esp_err_t sys_hal_audio_beep(uint32_t freq_hz, uint32_t duration_ms)
+{
+#if CONFIG_IDF_TARGET_ESP32P4
+    if (!s_audio) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (freq_hz < 100) {
+        freq_hz = 100;
+    }
+    if (freq_hz > 8000) {
+        freq_hz = 8000;
+    }
+    if (duration_ms < 20) {
+        duration_ms = 20;
+    }
+    if (duration_ms > 500) {
+        duration_ms = 500;
+    }
+    beep_req_t *req = malloc(sizeof(*req));
+    if (!req) {
+        return ESP_ERR_NO_MEM;
+    }
+    req->freq_hz = (uint16_t)freq_hz;
+    req->dur_ms = (uint16_t)duration_ms;
+    if (xTaskCreate(beep_task, "beep", 4096, req, 3, NULL) != pdPASS) {
+        free(req);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+#else
+    (void)freq_hz;
+    (void)duration_ms;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
 }

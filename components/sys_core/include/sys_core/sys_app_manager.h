@@ -12,6 +12,12 @@ extern "C" {
 #endif
 
 /**
+ * @brief 初始化调度器 (必须在任何 register/launch 之前调用)
+ * @note  内部创建互斥锁: 切换可来自不同任务 (启动主任务 / LVGL 适配器任务的按钮回调)
+ */
+esp_err_t sys_app_manager_init(void);
+
+/**
  * @brief 注册一个 APP (不启动)
  * @note  注册后立即回调 on_init; 若 on_init 失败, 返回错误且 APP 处于 STOPPED
  */

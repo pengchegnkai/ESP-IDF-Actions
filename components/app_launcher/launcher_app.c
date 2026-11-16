@@ -6,6 +6,7 @@
 #include <string.h>
 #include "app_launcher/launcher_app.h"
 #include "app_settings/app_settings.h"
+#include "app_splash/splash_app.h"
 #include "sys_core/sys_app_manager.h"
 #include "sys_core/sys_event_bus.h"
 #include "sys_core/sys_time_service.h"
@@ -143,7 +144,9 @@ static void build_grid(launcher_priv_t *p)
 {
     for (size_t i = 0; i < sys_app_count(); i++) {
         sys_app_t *app = sys_app_get(i);
-        if (!app || strcmp(app->id, LAUNCHER_APP_ID) == 0) {
+        /* 桌面与启动画面不是用户 APP, 不进网格 */
+        if (!app || strcmp(app->id, LAUNCHER_APP_ID) == 0 ||
+            strcmp(app->id, SPLASH_APP_ID) == 0) {
             continue;
         }
         lv_obj_t *btn = lv_button_create(p->grid);
@@ -188,10 +191,24 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0E0), 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, 0);
 
-    p->clock_label = lv_label_create(bar);
+    /* 状态栏右侧: 运行时间标签 + 时钟 (flex 行) */
+    lv_obj_t *clock_box = lv_obj_create(bar);
+    lv_obj_set_size(clock_box, 260, 44);
+    lv_obj_clear_flag(clock_box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(clock_box, LV_OPA_0, 0);
+    lv_obj_set_style_border_width(clock_box, 0, 0);
+    lv_obj_set_flex_flow(clock_box, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(clock_box, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(clock_box, 8, 0);
+    lv_obj_align(clock_box, LV_ALIGN_RIGHT_MID, -12, 0);
+
+    lv_obj_t *up_label = lv_label_create(clock_box);
+    lv_label_set_text(up_label, sys_ui_str(SYS_UI_STR_SET_UPTIME));
+    lv_obj_set_style_text_color(up_label, lv_color_hex(0x9AA5B1), 0);
+
+    p->clock_label = lv_label_create(clock_box);
     lv_label_set_text(p->clock_label, "00:00:00");
     lv_obj_set_style_text_color(p->clock_label, lv_color_hex(0x7EC8E3), 0);
-    lv_obj_align(p->clock_label, LV_ALIGN_RIGHT_MID, -12, 0);
 
     /* APP 网格 */
     p->grid = lv_obj_create(p->screen);

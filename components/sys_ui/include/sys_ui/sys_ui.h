@@ -76,7 +76,17 @@ typedef enum {
     SYS_UI_STR_BTN_BACK,          /* 返回按钮 */
     SYS_UI_STR_USB_IN,            /* USB 已插入 */
     SYS_UI_STR_USB_OUT,           /* USB 已拔出 */
-    SYS_UI_STR_SWITCH_LABEL,      /* 演示开关 */
+    SYS_UI_STR_SWITCH_LABEL,      /* 演示开关 (保留) */
+    SYS_UI_STR_SPLASH_SUBTITLE,   /* 启动画面副标题 */
+    SYS_UI_STR_SPLASH_STARTING,   /* 启动画面: 正在启动 */
+    SYS_UI_STR_SET_BRIGHTNESS,    /* 设置: 亮度 */
+    SYS_UI_STR_SET_VOLUME,        /* 设置: 音量 */
+    SYS_UI_STR_SET_SFX,           /* 设置: 按键音效 */
+    SYS_UI_STR_SET_INFO,          /* 设置: 系统信息 */
+    SYS_UI_STR_SET_PSRAM,         /* 设置: 内存 */
+    SYS_UI_STR_SET_UPTIME,        /* 运行时间 */
+    SYS_UI_STR_SET_LANG,          /* 设置: 语言 */
+    SYS_UI_STR_SET_FONT,          /* 设置: 字库 */
     SYS_UI_STR_COUNT
 } sys_ui_str_id_t;
 

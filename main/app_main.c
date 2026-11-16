@@ -21,6 +21,8 @@
 #include "sys_hal/sys_hal.h"
 #include "sys_ui/sys_ui.h"
 #include "sys_core/sys_time_service.h"
+#include "sys_core/sys_settings.h"
+#include "app_splash/splash_app.h"
 #include "app_launcher/launcher_app.h"
 #include "app_settings/app_settings.h"
 
@@ -54,7 +56,9 @@ static void audio_boot_task(void *arg)
     (void)arg;
     sys_hal_audio_t *audio = NULL;
     if (sys_hal_audio_init(&AUDIO_CFG, &audio) == ESP_OK) {
-        sys_hal_audio_set_volume(audio, 60);
+        int vol = 60;
+        sys_settings_get_volume(&vol);
+        sys_hal_audio_set_volume(audio, vol);
     } else {
         ESP_LOGW(TAG, "audio init failed, sound disabled");
     }
@@ -75,11 +79,14 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "=== System Base boot ===");
 
-    /* 1. NVS */
+    /* 1. NVS + 用户设置 (亮度/音量/音效, 持久化) */
     init_nvs();
+    ESP_ERROR_CHECK(sys_settings_init());
 
     /* 2. 事件总线 (最先建立, 其余子系统依赖) */
     ESP_ERROR_CHECK(sys_event_bus_init());
+    /* 2.5 APP 调度器 (跨任务互斥) */
+    ESP_ERROR_CHECK(sys_app_manager_init());
 
     /* 3. 硬件抽象层 (stub, 待板卡驱动接入) */
     sys_hal_display_t *display = NULL;
@@ -90,6 +97,11 @@ void app_main(void)
     if (sys_hal_i2c_init(&I2C_CFG, &i2c) != ESP_OK) {
         ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
     }
+
+    /* 恢复上次亮度 */
+    int bright = 100;
+    sys_settings_get_brightness(&bright);
+    sys_hal_display_set_brightness(bright);
 
     /* 3.5 SD 卡 (中文字库/资源); 无卡不致命, 界面降级为英文 */
     if (sys_hal_sd_mount() != ESP_OK) {
@@ -109,16 +121,14 @@ void app_main(void)
     ESP_ERROR_CHECK(sys_time_service_init());
 
     /* 6. 注册 APP (后续新 APP 在这里追加) */
-    ESP_LOGI(TAG, "register launcher");
+    ESP_ERROR_CHECK(sys_app_register(splash_app_get()));
     ESP_ERROR_CHECK(sys_app_register(launcher_app_get()));
-    ESP_LOGI(TAG, "launcher registered");
-    ESP_LOGI(TAG, "register settings");
     ESP_ERROR_CHECK(sys_app_register(settings_app_get()));
-    ESP_LOGI(TAG, "settings registered");
+    ESP_LOGI(TAG, "%u apps registered", (unsigned)sys_app_count());
 
-    ESP_LOGI(TAG, "launching default app");
-    /* 7. 启动默认桌面 */
-    ESP_ERROR_CHECK(sys_app_launch(LAUNCHER_APP_ID));
+    ESP_LOGI(TAG, "launching splash");
+    /* 7. 启动画面 (数秒后自动切入 Launcher) */
+    ESP_ERROR_CHECK(sys_app_launch(SPLASH_APP_ID));
 
     /* 音频在后台异步初始化, 不阻塞 UI */
     xTaskCreate(audio_boot_task, "audio_boot", 6144, NULL, 4, NULL);
