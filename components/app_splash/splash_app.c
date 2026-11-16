@@ -61,8 +61,8 @@ static void apply_cjk(splash_priv_t *p)
     if (f48) {
         lv_obj_set_style_text_font(p->brand, f48, 0);
     }
-    lv_obj_set_text(p->sub, sys_ui_str(SYS_UI_STR_SPLASH_SUBTITLE));
-    lv_obj_set_text(p->status, sys_ui_str(SYS_UI_STR_SPLASH_STARTING));
+    lv_label_set_text(p->sub, sys_ui_str(SYS_UI_STR_SPLASH_SUBTITLE));
+    lv_label_set_text(p->status, sys_ui_str(SYS_UI_STR_SPLASH_STARTING));
     lv_font_t *f24 = sys_ui_cjk_font(SYS_UI_FONT_DEFAULT_PX);
     if (f24) {
         lv_obj_set_style_text_font(p->sub, f24, 0);
