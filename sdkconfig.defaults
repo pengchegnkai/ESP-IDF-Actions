@@ -24,3 +24,8 @@ CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 # LVGL 内置分配器池: 默认 64KB 不够中文字形缓存 (128 字形×~1.3KB≈166KB + 对象树),
 # 字形 malloc 失败会触发 stbtt assert 重启。扩到 512KB (单块 >16KB 自动落 PSRAM)
 CONFIG_LV_MEM_SIZE_KILOBYTES=512
+
+# ESP-IDF 6.1 已知问题 (IDFGH-17859): P4 的 sleep clock ICG 初始化在应用
+# 静态内存占用较高时分配 REGDMA 描述符失败, app_main 前 abort 重启循环。
+# 该选项 (v6.1-rc1 起) 跳过这个可选的深睡时钟门控 —— 常亮 UI 设备用不到深睡
+CONFIG_PM_SLEEP_CLK_ICG_ENABLE=n
