@@ -21,9 +21,11 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # flash 32MB (官方示例同款; BSP 默认只给 2MB, 装不下 2M factory 分区)
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 
-# LVGL 内置分配器池: 默认 64KB 不够中文字形缓存 (128 字形×~1.3KB≈166KB + 对象树),
-# 字形 malloc 失败会触发 stbtt assert 重启。扩到 512KB (单块 >16KB 自动落 PSRAM)
-CONFIG_LV_MEM_SIZE_KILOBYTES=512
+# LVGL 分配器: 自定义后端 (sys_ui/src/sys_ui_mem.c), 全部 LVGL 内存走 PSRAM 堆。
+# 内置池是静态 .bss, 在 P4 上会吃掉内部 DRAM (512KB 池 → .dram0.bss 518KB →
+# 启动 32K DMA 池保留失败 abort); 64KB 池又不够中文字形缓存 (stbtt assert)。
+# 详见 sys_ui_mem.c 头注释。
+CONFIG_LV_USE_CUSTOM_MALLOC=y
 
 # ESP-IDF 6.1 已知问题 (IDFGH-17859): P4 的 sleep clock ICG 初始化在应用
 # 静态内存占用较高时分配 REGDMA 描述符失败, app_main 前 abort 重启循环。
