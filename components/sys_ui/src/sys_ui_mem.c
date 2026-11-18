@@ -20,7 +20,6 @@
  */
 #include <lvgl.h>
 #include "esp_heap_caps.h"
-#include "esp_psram.h"
 
 /* 分配域: lv_mem_init 时探测 PSRAM, 之后所有分配统一用同一 caps
  * (混合域会让跨域 realloc 失败) */
@@ -28,8 +27,10 @@ static int s_caps = MALLOC_CAP_DEFAULT;
 
 void lv_mem_init(void)
 {
-    s_caps = esp_psram_is_initialized() ? (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
-                                        : MALLOC_CAP_DEFAULT;
+    /* PSRAM 探测不依赖 esp_psram 组件: 无 PSRAM 堆时 total=0 → 用内部堆 */
+    s_caps = heap_caps_get_total_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) > 0
+                 ? (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+                 : MALLOC_CAP_DEFAULT;
 }
 
 void lv_mem_deinit(void)
