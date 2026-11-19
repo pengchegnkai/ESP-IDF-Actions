@@ -1,8 +1,7 @@
 # AI 交接文档（AI Handover）
 
-> 最后更新：2026-11-15
-> 已验证固件：**build-29**（commit `4446174`）—— 用户已确认 Launcher 界面正常显示、触摸导航正常
-> ⚠️ **工作区有未提交的中文支持代码**（12 个文件，见 §7），**尚未编译、未验证**。接手后第一件事是读 §7 和 §10。
+> 最后更新：2026-11-19
+> 已验证固件：**commit `a502b9e`** —— 用户已确认中文界面正常（build-31 时代）；最新版（启动画面+设置页真实功能+PSRAM 内存后端）串口日志验证全流程通过，**待用户上机确认观感**。
 >
 > 本文档写给下一个 AI/开发者：包含项目目标、架构、已验证结论、踩坑根因链、
 > 手机端工具链的确切用法、以及当前进行到一半的工作。不要依赖本文档之外的"记忆"。
@@ -67,13 +66,15 @@ esp-idf-gh-actions-demo/
 - `on_init` 只做内存分配，**不碰 LVGL**（注册阶段拿显示锁会与适配任务死锁）。
 - UI 构建延迟到 `on_start` 首次进前台（`p->ui_built` 守卫）。
 
-## 4. 已完成且已验证（截至 build-29 / `4446174`）
+## 4. 已完成且已验证（截至 commit `a502b9e`）
 
 - ✅ 完整项目骨架 + CI（push 编 esp32p4，dispatch 可选三芯片，自动 Release）
 - ✅ 系统基座：APP 生命周期调度、事件总线、时间服务、全局 UI（屏幕切换 + 顶层弹窗 overlay）、sys_hal（BSP 直通）
-- ✅ 双 APP：launcher（桌面）、settings（设置演示，含返回栈 `sys_app_back`）
-- ✅ **屏幕显示正常、触摸导航正常**（用户确认：launcher ↔ settings 来回点击切换均正常，弹窗演示可用）
-- ✅ PSRAM 开启（32MB hex 200MHz）、I2C 复用 BSP 总线、音频后台初始化
+- ✅ APP：launcher（桌面）、settings（真实功能）、splash（启动画面）
+- ✅ **中文界面正常**（用户确认；NotoSansSC.ttf 在 SD 卡 fonts/ 目录）
+- ✅ 设置页真实功能：亮度/音量滑块 + 按键音效开关 + 系统信息；NVS 持久化（write-through，namespace "sys"，key: bright/vol/sfx）
+- ✅ 启动画面掩盖上电白屏：上电 ~1.9s 出 splash（此前 ~6.5s 白屏），字库加载期间持续渲染，加载完自动升中文，`splash_set_ready()` 后切桌面
+-串口日志全流程验证通过（2026-11-19）：splash 1.86s 前台 → 字库 6.5s 加载完 → 7.1s 切 launcher，无 abort/assert/WDT
 
 ## 5. 调试记录：黑屏 → 白屏 → 正常（根因链，按时间顺序）
 
@@ -134,51 +135,25 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 
 ## 7. 未完成项（哪些还没搞完 —— 接手重点）
 
-### 7.1 【进行中】SD 卡字库中文支持 —— 编译通过（build-31 `5872ca3`）、无字库路径实测 OK，**有字库中文上屏未验证**
+### 7.1 【已解决】此前的中文支持/崩溃问题（历史记录见 §8 铁律）
 
-设计：启动时扫描 `/sdcard/fonts/*.ttf`（第一个）→ 读入 PSRAM → LVGL 9.3 `lv_tiny_ttf_create_data()` 按需渲染（stb_truetype 流式，不吃整文件内存）→ 中文 UI；无 SD 卡/无字库 → 英文 UI（内置 Montserrat）。语言由字库可用性自动决定，无需手动切换。
+中文支持（build-31 时代）已由用户确认可用；后续一系列启动崩溃的根因与修复见 §8 铁律 8-10，
+关键 commit：`3eea3b1`（事件总线分组）、`d6f5ac8`（禁 ICG）、`a502b9e`（LVGL 内存后端切 PSRAM + WHOLE_ARCHIVE）。
 
-已写文件（12 个，git 状态 M/??）：
-| 文件 | 改动 |
-|---|---|
-| `components/sys_hal/src/sys_hal.c` + 头 | 新增 `sys_hal_sd_mount()`（P4 直通 `bsp_sdcard_mount()`）、`sys_hal_sd_mount_point()` |
-| `components/sys_ui/src/sys_ui_font.c` | **新文件**：字库扫描/加载/PSRAM 缓存、按字号字体缓存（8 槽）、i18n 字符串表（中/英 12 条）、`sys_ui_font_init/lang/str/cjk_font` |
-| `components/sys_ui/src/sys_ui.c` + 头 | `sys_ui_set_root` 自动给屏幕设中文字体；头文件新增语言/文案/字体 API |
-| `components/sys_ui/CMakeLists.txt` | 加 `sys_ui_font.c` + `REQUIRES heap` |
-| `components/app_launcher/launcher_app.c` + CMakeLists | 全部文案走 `sys_ui_str()`；弹窗显式设中文字体；`REQUIRES app_settings`（用 SETTINGS_APP_ID） |
-| `components/app_settings/app_settings.c` | 全部文案走 `sys_ui_str()` |
-| `main/app_main.c` | HAL 后挂 SD（失败不致命）、`sys_ui_init` 后调 `sys_ui_font_init`（APP 建 UI 前） |
-| `sdkconfig.defaults` | `CONFIG_LV_USE_TINY_TTF=y` |
-| `sdkconfig.defaults.esp32p4` | **新文件**：`CONFIG_BSP_SD_FORMAT_ON_MOUNT_FAIL=y`（空卡自动 FAT 格式化） |
+### 7.2 【待用户确认】最新固件观感（当前卡点）
 
-**历史风险点（build-31 首编译已验证：前两点均排除——include 级联与 API 签名都通过；首编译实际报的是注释 `/*` 序列与 snprintf 截断，已修）**：
-1. `lv_tiny_ttf.h` 的 include 路径——用 `__has_include` 级联兼容三种布局（`libs/tiny_ttf/...` / `src/libs/tiny_ttf/...` / 裸名），都不中会 `#error`。可查 lvgl 仓库 `CMakeLists.txt` 的 `INCLUDE_DIRS` 确认。
-2. `lv_tiny_ttf_create_data` API 签名按 LVGL 9.3 官方头文件核实过（data/size/size 三参），但没实际编译过。
-3. 中文渲染效果、字体大小观感（默认 24px）未上屏确认。
+commit `a502b9e` 固件串口日志全流程通过，待用户上机确认：
+- 上电白屏是否明显缩短（预期 ~2s 内出启动画面）
+- 启动画面 → 中文切换 → 桌面的过渡观感
+- 设置页亮度/音量/音效实际效果
+- 反复进设置页/弹窗是否稳定（PSRAM 内存后端下不应再 OOM）
 
-### 7.2 【已就绪，待用户拷卡】字库文件
+### 7.3 【已知小瑕疵】
 
-两个 CJK 字库（TTF 魔数均已验证）已放在手机两处：
-- Termux 家目录：`~/sdcard_fonts/`
-- **文件管理器可见**（推荐用这个拷）：`/sdcard/Download/esp32-fonts/`
-  - `NotoSansSC.ttf`（17MB，variable font，首选）
-  - `LXGWWenKai-Regular.ttf`（25MB，霞鹜文楷 Regular 静态版，备用；25MB 常驻 PSRAM 后余量紧张）
-
-操作路径：手机 OTG 接卡 → 文件管理器在卡根目录建 `fonts/` 目录 → 把 `NotoSansSC.ttf` 移入 → 安全弹出、装回板子 → 重启板卡（无需重烧固件）。
-（Termux 无 root 无法直写 OTG 卡，2026-11-15 已逐项验证：无 su/magisk（Termux 的 su 是提示性 stub）、`/dev/fuse` Permission denied、OTG 卷不在 Termux 挂载命名空间（`/mnt/runtime/{read,default}/4421-D914` 均 ENOENT，`/mnt/media_rw` 属系统命名空间）、`termux-setup-storage` 只给内部存储权限。**不要再花时间重试直写。**）
-
-### 7.3 【一半】中文支持的两条路径验证
-
-- ✅ **无字库路径已验证**（build-31 `5872ca3`，2026-11-15 烧录实测）：板上有 SD 卡且挂载成功（无 "SD card unavailable" 日志），`no TTF found in /sdcard/fonts, English UI` → `UI language: en` → `launcher ui built` → `system ready`，无崩溃无看门狗；overlay 弹窗开/关与触摸 APP 切换均实测正常。
-- ⏳ **有字库路径未验证（当前卡点，等用户操作）**：用户经 OTG + 文件管理器把 `NotoSansSC.ttf` 从 `/sdcard/Download/esp32-fonts/` 移入 SD 卡根目录的 `fonts/` 目录（先建目录）→ 卡装回板子 → **重启板卡（无需重烧固件）** → 抓串口确认 `CJK font loaded: ... -> Chinese UI`，重点看：中文字形是否出方块（variable font 与 stb 的兼容性）、字号观感、17MB 字库常驻 PSRAM 后的余量。若 Noto 不生效，换 `LXGWWenKai-Regular.ttf`（25MB，注意 PSRAM 余量）。
-串口关键词：`ui_font:`（新模块 TAG）、`UI language:`、`CJK font`、`SD card unavailable`。
-
-### 7.4 【已知小瑕疵】
-
-- `app_main.c` 中 `DISPLAY_CFG`/`TOUCH_CFG` 的分辨率仅用于日志（BSP 内部用真实 480×800），当前值已是 480×800，无问题。
 - S3/C6 目标的 sys_hal 仍是 stub（显示/触摸/音频降级），SD 挂载返回 `ESP_ERR_NOT_SUPPORTED`（预期行为，中文功能仅 P4 可用）。
+- `sys_ui_mem.c` 的 monitor 统计是整堆口径（PSRAM 全局），非 LVGL 独占用量。
 
-### 7.5 【远期 TODO（未开始）】
+### 7.4 【远期 TODO（未开始）】
 
 - WiFi 联网（esp32_c6 协处理器路径未接）
 - 音频播放/录音 API 演示（目前只有 init + volume）
@@ -195,6 +170,10 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 5. 换板/换屏参数只改 `main/app_main.c` 顶部的 CFG 结构。
 6. 新 APP：写 `sys_app_t`（生命周期函数）+ `xxx_app_get()`，在 `app_main.c` 注册；文案进 `sys_ui_font.c` 的 i18n 表（中/英各一条）。
 7. 编译目标：push 固定 esp32p4；改公共代码后 S3/C6 目标也需在 dispatch 里验证（sys_ui/sys_hal 有非 P4 分支）。
+8. **P4 内部 DRAM 极其紧张（动态池仅 ~60KB）**：任何大静态数组（.bss）都可能挤爆启动期分配（32K DMA 池保留 / sleep clock ICG / REGDMA）。LVGL 内存必须走 `LV_USE_CUSTOM_MALLOC` + `sys_ui_mem.c`（全 PSRAM），**不要改回内置分配器**；`CONFIG_PM_SLEEP_CLK_ICG_ENABLE=n`（绕过 IDFGH-17859）保留。
+9. **LVGL 9.3 API 坑（与 8.x/网上资料不同）**：字体宏是 `const lv_font_t` 对象（取地址 `&lv_font_montserrat_48`，且要赋给 `const lv_font_t *`）；没有 `lv_switch_get/set_state`（用 `lv_obj_has_state/add_state` + `LV_STATE_CHECKED`）；没有 `lv_obj_set_text`（用 `lv_label_set_text`）；Kconfig 字体符号**无 USE_ 前缀**（`CONFIG_LV_FONT_MONTSERRAT_48`，库选项才带，如 `LV_USE_TINY_TTF`）。
+10. **组件反向提供符号给 lvgl（如自定义分配器 _core）必须 `WHOLE_ARCHIVE`**：静态库按需提取不会为后到的引用拉入对象，会链接期 undefined reference。
+11. **flash 32MB + 自定义分区表 `partitions.csv`（factory 2M）**：IDF 默认 single_app 只有 1M，固件已 ~1.07MB。
 
 ## 9. 关键文件地图
 
