@@ -98,7 +98,7 @@ static void on_now_recv(const esp_now_recv_info_t *info, const uint8_t *data, in
     peers_expire();
     int idx = -1;
     for (int i = 0; i < s_peer_count; i++) {
-        if (memcmp(s_peers[i].mac, info->src_mac, 6) == 0) {
+        if (memcmp(s_peers[i].mac, info->src_addr, 6) == 0) {
             idx = i;
             break;
         }
@@ -109,7 +109,7 @@ static void on_now_recv(const esp_now_recv_info_t *info, const uint8_t *data, in
         } else {
             idx = s_peer_count++;
         }
-        memcpy(s_peers[idx].mac, info->src_mac, 6);
+        memcpy(s_peers[idx].mac, info->src_addr, 6);
     }
     memcpy(s_peers[idx].name, data, (size_t)len);
     s_peers[idx].name[len] = '\0';
@@ -136,7 +136,7 @@ static void beacon_task(void *arg)
         if (!s_active) {
             continue;
         }
-        if (!esp_wifi_is_started()) {
+        if (!sys_net_wifi_is_enabled()) {
             continue; /* 射频没开, 不发 */
         }
         esp_now_send(bcast, (const uint8_t *)s_name, (size_t)strlen(s_name));

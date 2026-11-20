@@ -35,6 +35,8 @@ static bool s_inited;
 static SemaphoreHandle_t s_status_lock;
 static sys_net_wifi_status_t s_status;   /* 状态快照 (互斥保护) */
 static bool s_wifi_enabled;              /* 用户开关 (与链路状态分开) */
+static bool s_wifi_started;              /* esp_wifi_start() 已成功
+                                            (esp_wifi_remote 不导出 esp_wifi_is_started) */
 #if CONFIG_IDF_TARGET_ESP32P4
 static int s_retry;                      /* 断开重连计数 */
 static QueueHandle_t s_cmd_q;            /* net 任务命令队列 */
@@ -165,8 +167,9 @@ static void net_task(void *arg)
 
 static esp_err_t post_cmd(cmd_type_t type, int iarg, void *varg)
 {
-    return xQueueSend(s_cmd_q, &(cmd_t){ .type = type, .iarg = iarg, .varg = varg }, 0) == pdTRUE
-               ? ESP_OK : ESP_ERR_TIMEOUT;
+    /* 不能直接把复合字面量塞进 xQueueSend: 逗号会被预处理器当成多个参数 */
+    cmd_t c = { .type = type, .iarg = iarg, .varg = varg };
+    return xQueueSend(s_cmd_q, &c, 0) == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
 /* ---------- 命令实现 (net 任务上下文) ---------- */
@@ -197,6 +200,7 @@ static void net_cmd_enable(bool enable)
                 return;
             }
             stack_up = true;
+            s_wifi_started = true;
             ESP_LOGI(TAG, "wifi stack up (C6 coprocessor)");
         }
         /* 有凭据则自动连接 */
@@ -209,9 +213,10 @@ static void net_cmd_enable(bool enable)
         }
     } else if (!enable && s_wifi_enabled) {
         s_wifi_enabled = false;
-        if (esp_wifi_is_started()) {
+        if (s_wifi_started) {
             esp_wifi_disconnect();
             esp_wifi_stop();
+            s_wifi_started = false;
         }
         wifi_set_state(SYS_NET_WIFI_OFF, NULL);
         s_status.ssid[0] = '\0';
@@ -220,7 +225,7 @@ static void net_cmd_enable(bool enable)
 
 static void net_cmd_connect(const char *ssid, const char *pass)
 {
-    if (!s_wifi_enabled || !esp_wifi_is_started()) {
+    if (!s_wifi_enabled || !s_wifi_started) {
         return;
     }
     wifi_config_t cfg = {0};
@@ -246,7 +251,7 @@ static void net_cmd_scan(const sys_net_scan_cb_t cb, void *ctx)
     sys_net_ap_info_t aps[SYS_NET_SCAN_MAX];
     int n = 0;
     esp_err_t err = ESP_OK;
-    if (!s_wifi_enabled || !esp_wifi_is_started()) {
+    if (!s_wifi_enabled || !s_wifi_started) {
         err = ESP_ERR_INVALID_STATE;
     } else {
         wifi_scan_config_t scan_cfg = {
@@ -255,14 +260,18 @@ static void net_cmd_scan(const sys_net_scan_cb_t cb, void *ctx)
         };
         if (esp_wifi_scan_start(&scan_cfg, false) == ESP_OK) {
             uint16_t ap_num = 0;
+            static wifi_ap_record_t recs[SYS_NET_SCAN_MAX];
             if (esp_wifi_scan_get_ap_num(&ap_num) == ESP_OK) {
-                for (uint16_t i = 0; i < ap_num && n < SYS_NET_SCAN_MAX; i++) {
-                    wifi_ap_record_t rec;
-                    if (esp_wifi_scan_get_ap_record(i, &rec) == ESP_OK && rec.ssid[0]) {
-                        aps[n].rssi = rec.rssi;
-                        aps[n].auth = (uint8_t)rec.authmode;
-                        aps[n].hidden = rec.hidden;
-                        strncpy(aps[n].ssid, (const char *)rec.ssid,
+                uint16_t want = ap_num > SYS_NET_SCAN_MAX ? SYS_NET_SCAN_MAX : ap_num;
+                if (want == 0 ||
+                    esp_wifi_scan_get_ap_records(&want, recs) == ESP_OK) {
+                    for (uint16_t i = 0; i < want; i++) {
+                        if (!recs[i].ssid[0]) {
+                            continue;  /* 隐藏 SSID 跳过 */
+                        }
+                        aps[n].rssi = recs[i].rssi;
+                        aps[n].auth = (uint8_t)recs[i].authmode;
+                        strncpy(aps[n].ssid, (const char *)recs[i].ssid,
                                 sizeof(aps[n].ssid) - 1);
                         n++;
                     }
@@ -304,10 +313,16 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
         } else if (id == WIFI_EVENT_STA_CONNECTED) {
             wifi_event_sta_connected_t *ev = data;
             s_retry = 0;
+            /* 该事件结构体没有 rssi 字段, 关联后单独取 */
+            wifi_ap_record_t ap = {0};
+            int rssi = 0;
+            if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+                rssi = ap.rssi;
+            }
             ESP_LOGI(TAG, "associated with \"%s\" (rssi %d)",
-                     (const char *)ev->ssid, ev->rssi);
+                     (const char *)ev->ssid, rssi);
             xSemaphoreTake(s_status_lock, portMAX_DELAY);
-            s_status.rssi = ev->rssi;
+            s_status.rssi = (int8_t)rssi;
             xSemaphoreGive(s_status_lock);
             wifi_set_state(SYS_NET_WIFI_CONNECTING, (const char *)ev->ssid);
         } else if (id == WIFI_EVENT_STA_DISCONNECTED) {
