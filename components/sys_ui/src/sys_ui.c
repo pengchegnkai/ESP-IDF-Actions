@@ -137,3 +137,65 @@ esp_err_t sys_ui_init(void)
     s_inited = true;
     return ESP_OK;
 }
+
+/* ========================= Vela 主题 ========================= */
+#include "sys_ui/sys_ui_theme.h"
+
+void sys_ui_theme_screen(lv_obj_t *scr)
+{
+    lv_obj_set_style_bg_color(scr, lv_color_hex(SYS_UI_THEME_BG), 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+}
+
+void sys_ui_theme_card(lv_obj_t *card)
+{
+    lv_obj_set_style_bg_color(card, lv_color_hex(SYS_UI_THEME_CARD), 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(card, SYS_UI_THEME_RADIUS, 0);
+    lv_obj_set_style_pad_all(card, 16, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(SYS_UI_THEME_BORDER), 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+}
+
+void sys_ui_theme_card_dim(lv_obj_t *card)
+{
+    sys_ui_theme_card(card);
+    lv_obj_set_style_bg_opa(card, LV_OPA_40, 0);
+    lv_obj_set_style_border_width(card, 0, 0);
+}
+
+const lv_font_t *sys_ui_theme_font(uint32_t px)
+{
+    lv_font_t *f = sys_ui_cjk_font(px);
+    if (f) {
+        return f;
+    }
+    /* 英文模式: 回退内置 Montserrat (符号需已在 sdkconfig 启用) */
+#if CONFIG_LV_FONT_MONTSERRAT_48
+    if (px >= 44) {
+        return &lv_font_montserrat_48;
+    }
+#endif
+#if CONFIG_LV_FONT_MONTSERRAT_32
+    if (px >= 36) {
+        return &lv_font_montserrat_32;
+    }
+#endif
+#if CONFIG_LV_FONT_MONTSERRAT_28
+    if (px >= 28) {
+        return &lv_font_montserrat_28;
+    }
+#endif
+#if CONFIG_LV_FONT_MONTSERRAT_24
+    if (px >= 24) {
+        return &lv_font_montserrat_24;
+    }
+#endif
+#if CONFIG_LV_FONT_MONTSERRAT_20
+    if (px >= 20) {
+        return &lv_font_montserrat_20;
+    }
+#endif
+    return LV_FONT_DEFAULT;
+}

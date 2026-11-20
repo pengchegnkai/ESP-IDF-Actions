@@ -1,22 +1,29 @@
 /**
  * @file app_settings.c
- * @brief 设置 APP —— 亮度/音量/音效 (NVS 持久化) + 系统信息
+ * @brief 设置 APP —— 亮度/音量/音效 (NVS 持久化) + 系统信息 (Vela 卡片风格)
+ *
+ * Vela 交互逻辑:
+ *   - 顶部边缘下拉 → 控制中心;  底部边缘上滑 / 左上返回键 → 返回
+ *   - 返回栈为空时回表盘 (主页), 不再回应用列表
  */
 #include <stdlib.h>
 #include <string.h>
 #include "app_settings/app_settings.h"
+#include "app_watch/watch_app.h"
 #include "sys_core/sys_app_manager.h"
 #include "sys_core/sys_event_bus.h"
 #include "sys_core/sys_time_service.h"
 #include "sys_core/sys_settings.h"
 #include "sys_hal/sys_hal.h"
 #include "sys_ui/sys_ui.h"
+#include "sys_ui/sys_ui_theme.h"
+#include "sys_ui/sys_ui_gesture.h"
+#include "sys_ui/sys_ui_quickpanel.h"
 #include "esp_heap_caps.h"
 #include "lvgl.h"
 #include "esp_log.h"
 
 static const char *TAG = "settings";
-/* 前向声明: APP 对象定义在文件尾, 生命周期函数在后 */
 static esp_err_t on_init(sys_app_t *app);
 static esp_err_t on_start(sys_app_t *app);
 static void on_suspend(sys_app_t *app);
@@ -35,13 +42,31 @@ typedef struct {
     sys_event_handle_t tick_sub;
 } settings_priv_t;
 
+/* ---------- 导航 ---------- */
+
 static void back_cb(lv_event_t *e)
 {
     (void)e;
     if (sys_app_back() != ESP_OK) {
-        sys_app_launch("launcher"); /* 栈底时回桌面 */
+        sys_app_launch(WATCH_APP_ID);  /* 栈底时回表盘 (主页) */
     }
 }
+
+static void back_edge_cb(void *ctx)
+{
+    (void)ctx;
+    back_cb(NULL);
+}
+
+static void qc_open_cb(void *ctx)
+{
+    (void)ctx;
+    if (!sys_ui_quickpanel_active()) {
+        sys_ui_quickpanel_show();
+    }
+}
+
+/* ---------- 控件回调 (LVGL 事件上下文, 已持显示锁) ---------- */
 
 /* 按键音效 (受设置开关控制) */
 static void beep_if_sfx(void)
@@ -87,7 +112,7 @@ static void sfx_cb(lv_event_t *e)
     }
 }
 
-/* 每秒刷新系统信息 (运行时间/内存余量) */
+/* 每秒刷新系统信息 (运行时间/内存余量) —— sys_evt 任务上下文, 需取锁 */
 static void on_time_tick(int32_t event_id, void *event_data, void *user_ctx)
 {
     (void)event_id; (void)event_data;
@@ -111,39 +136,57 @@ static void on_time_tick(int32_t event_id, void *event_data, void *user_ctx)
     sys_ui_unlock();
 }
 
-/* 生成一行 "名称(左) + 数值(右)" 标签行, 返回行对象 */
+/* ---------- UI 构件 ---------- */
+
+static lv_obj_t *make_card(lv_obj_t *parent)
+{
+    lv_obj_t *card = lv_obj_create(parent);
+    lv_obj_set_width(card, LV_PCT(100));
+    lv_obj_set_height(card, LV_SIZE_CONTENT);
+    sys_ui_theme_card(card);
+    lv_obj_set_style_pad_row(card, 12, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    return card;
+}
+
+/* "名称(左) + 数值(右)" 信息行 */
 static lv_obj_t *info_row(lv_obj_t *parent, const char *name, lv_obj_t **value_out)
 {
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 30);
+    lv_obj_set_height(row, 32);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(row, LV_OPA_0, 0);
     lv_obj_set_style_border_width(row, 0, 0);
 
     lv_obj_t *nm = lv_label_create(row);
     lv_label_set_text(nm, name);
-    lv_obj_set_style_text_color(nm, lv_color_hex(0xE0E0E0), 0);
+    lv_obj_set_style_text_color(nm, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(nm, sys_ui_theme_font(22), 0);
     lv_obj_align(nm, LV_ALIGN_LEFT_MID, 0, 0);
 
     lv_obj_t *val = lv_label_create(row);
-    lv_obj_set_style_text_color(val, lv_color_hex(0x7EC8E3), 0);
+    lv_obj_set_style_text_color(val, lv_color_hex(SYS_UI_THEME_ACCENT), 0);
+    lv_obj_set_style_text_font(val, sys_ui_theme_font(20), 0);
     lv_obj_align(val, LV_ALIGN_RIGHT_MID, 0, 0);
     *value_out = val;
     return row;
 }
 
-/* 生成一个滑杆 (0-100), 带数值标签 */
-static lv_obj_t *add_slider(settings_priv_t *p, int value, lv_obj_t *value_label,
-                            lv_event_cb_t cb)
+/* 滑杆行: 标题行(名称+数值) + 滑杆 */
+static void add_slider_row(lv_obj_t *card, const char *name, int value,
+                           lv_obj_t **slider_out, lv_obj_t **value_out,
+                           lv_event_cb_t cb, void *ctx)
 {
-    lv_obj_t *s = lv_slider_create(p->screen);
+    info_row(card, name, value_out);
+    lv_obj_t *s = lv_slider_create(card);
     lv_obj_set_width(s, LV_PCT(100));
+    lv_obj_set_height(s, 6);
     lv_slider_set_range(s, 0, 100);
     lv_slider_set_value(s, value, LV_ANIM_OFF);
-    lv_obj_add_event_cb(s, cb, LV_EVENT_VALUE_CHANGED, p);
-    lv_label_set_text_fmt(value_label, "%d%%", value);
-    return s;
+    lv_obj_add_event_cb(s, cb, LV_EVENT_VALUE_CHANGED, ctx);
+    lv_label_set_text_fmt(*value_out, "%d%%", value);
+    *slider_out = s;
 }
 
 static esp_err_t build_ui(sys_app_t *app)
@@ -152,45 +195,76 @@ static esp_err_t build_ui(sys_app_t *app)
     if (!p) {
         return ESP_ERR_NO_MEM;
     }
-    app->priv = p;
     if (!sys_ui_lock()) {
         return ESP_FAIL;
     }
     p->screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x14181C), 0);
-    lv_obj_set_flex_flow(p->screen, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(p->screen, 16, 0);
-    lv_obj_set_style_pad_row(p->screen, 12, 0);
+    sys_ui_theme_screen(p->screen);
+    lv_obj_clear_flag(p->screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* 标题 */
-    lv_obj_t *title = lv_label_create(p->screen);
+    /* 边缘手势: 顶=控制中心, 底=返回 */
+    sys_ui_top_edge_create(p->screen, qc_open_cb, app);
+    sys_ui_bottom_edge_create(p->screen, back_edge_cb, app);
+
+    /* 顶部条: 返回 + 标题 */
+    lv_obj_t *bar = lv_obj_create(p->screen);
+    lv_obj_set_size(bar, LV_PCT(100), 52);
+    lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, 26);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(bar, 0, 0);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *back = lv_button_create(bar);
+    lv_obj_set_size(back, 88, 40);
+    lv_obj_align(back, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_radius(back, 20, 0);
+    lv_obj_set_style_bg_color(back, lv_color_hex(SYS_UI_THEME_CARD), 0);
+    lv_obj_add_event_cb(back, back_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *back_lbl = lv_label_create(back);
+    lv_label_set_text_fmt(back_lbl, "← %s", sys_ui_str(SYS_UI_STR_BTN_BACK));
+    lv_obj_set_style_text_font(back_lbl, sys_ui_theme_font(20), 0);
+    lv_obj_set_style_text_color(back_lbl, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_center(back_lbl);
+    lv_obj_t *title = lv_label_create(bar);
     lv_label_set_text(title, sys_ui_str(SYS_UI_STR_APP_SETTINGS));
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0E0), 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(title, sys_ui_theme_font(30), 0);
+    lv_obj_align(title, LV_ALIGN_RIGHT_MID, -8, 0);
 
-    /* 亮度 */
-    info_row(p->screen, sys_ui_str(SYS_UI_STR_SET_BRIGHTNESS), &p->bright_value);
+    /* 滚动区 + 卡片 */
+    lv_obj_t *scroll = lv_obj_create(p->screen);
+    lv_obj_set_size(scroll, LV_PCT(100), LV_PCT(100) - 78);
+    lv_obj_align(scroll, LV_ALIGN_TOP_MID, 0, 78);
+    lv_obj_set_style_bg_opa(scroll, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(scroll, 0, 0);
+    lv_obj_set_style_pad_all(scroll, 16, 0);
+    lv_obj_set_style_pad_row(scroll, 16, 0);
+    lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
+
+    /* 卡 1: 亮度 */
+    lv_obj_t *c1 = make_card(scroll);
     int b = 100;
     sys_settings_get_brightness(&b);
-    p->bright_slider = add_slider(p, b, p->bright_value, bright_cb);
+    add_slider_row(c1, sys_ui_str(SYS_UI_STR_SET_BRIGHTNESS), b,
+                   &p->bright_slider, &p->bright_value, bright_cb, p);
 
-    /* 音量 */
-    info_row(p->screen, sys_ui_str(SYS_UI_STR_SET_VOLUME), &p->vol_value);
+    /* 卡 2: 声音 (音量 + 音效) */
+    lv_obj_t *c2 = make_card(scroll);
     int v = 60;
     sys_settings_get_volume(&v);
-    p->vol_slider = add_slider(p, v, p->vol_value, vol_cb);
-
-    /* 按键音效 (单行: 名称 + 开关) */
-    lv_obj_t *sfx_row = lv_obj_create(p->screen);
-    lv_obj_set_width(sfx_row, LV_PCT(100));
-    lv_obj_set_height(sfx_row, 40);
+    add_slider_row(c2, sys_ui_str(SYS_UI_STR_SET_VOLUME), v,
+                   &p->vol_slider, &p->vol_value, vol_cb, p);
+    lv_obj_t *sfx_row = lv_obj_create(c2);
+    lv_obj_set_size(sfx_row, LV_PCT(100), 48);
     lv_obj_clear_flag(sfx_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(sfx_row, LV_OPA_0, 0);
     lv_obj_set_style_border_width(sfx_row, 0, 0);
     lv_obj_t *sfx_nm = lv_label_create(sfx_row);
     lv_label_set_text(sfx_nm, sys_ui_str(SYS_UI_STR_SET_SFX));
-    lv_obj_set_style_text_color(sfx_nm, lv_color_hex(0xE0E0E0), 0);
+    lv_obj_set_style_text_color(sfx_nm, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(sfx_nm, sys_ui_theme_font(22), 0);
     lv_obj_align(sfx_nm, LV_ALIGN_LEFT_MID, 0, 0);
     p->sfx_switch = lv_switch_create(sfx_row);
+    lv_obj_set_size(p->sfx_switch, 76, 40);
     bool sfx = true;
     sys_settings_get_sfx(&sfx);
     if (sfx) {
@@ -199,22 +273,24 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_align(p->sfx_switch, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_add_event_cb(p->sfx_switch, sfx_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* 系统信息 */
-    lv_obj_t *sec = lv_label_create(p->screen);
+    /* 卡 3: 系统信息 */
+    lv_obj_t *c3 = make_card(scroll);
+    lv_obj_t *sec = lv_label_create(c3);
     lv_label_set_text(sec, sys_ui_str(SYS_UI_STR_SET_INFO));
-    lv_obj_set_style_text_color(sec, lv_color_hex(0x9AA5B1), 0);
-
-    info_row(p->screen, sys_ui_str(SYS_UI_STR_SET_PSRAM), &p->psram_label);
-    info_row(p->screen, sys_ui_str(SYS_UI_STR_SET_UPTIME), &p->uptime_label);
+    lv_obj_set_style_text_color(sec, lv_color_hex(SYS_UI_THEME_TEXT_DIM), 0);
+    lv_obj_set_style_text_font(sec, sys_ui_theme_font(20), 0);
+    info_row(c3, sys_ui_str(SYS_UI_STR_SET_PSRAM), &p->psram_label);
+    info_row(c3, sys_ui_str(SYS_UI_STR_SET_UPTIME), &p->uptime_label);
     lv_obj_t *lang_val;
-    info_row(p->screen, sys_ui_str(SYS_UI_STR_SET_LANG), &lang_val);
+    info_row(c3, sys_ui_str(SYS_UI_STR_SET_LANG), &lang_val);
     lv_label_set_text(lang_val,
                       sys_ui_lang() == SYS_UI_LANG_ZH ? "中文" : "English");
     lv_obj_t *font_val;
-    info_row(p->screen, sys_ui_str(SYS_UI_STR_SET_FONT), &font_val);
+    info_row(c3, sys_ui_str(SYS_UI_STR_SET_FONT), &font_val);
     lv_label_set_text(font_val,
                       sys_ui_lang() == SYS_UI_LANG_ZH ? "SD TTF" : "Built-in");
-    /* 立即刷新一次数值 (此处已持有显示锁, 不能走 on_time_tick 的加锁路径) */
+
+    /* 立即刷新一次数值 (此处已持有显示锁, 不走 on_time_tick 的加锁路径) */
     {
         uint32_t sec = sys_time_uptime_sec();
         lv_label_set_text_fmt(p->uptime_label, "%02u:%02u:%02u",
@@ -224,16 +300,12 @@ static esp_err_t build_ui(sys_app_t *app)
                               (unsigned)(heap_caps_get_total_size(MALLOC_CAP_SPIRAM) / 1024));
     }
 
-    /* 返回按钮 (固定底部) */
-    lv_obj_t *back = lv_button_create(p->screen);
-    lv_obj_add_event_cb(back, back_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *back_label = lv_label_create(back);
-    lv_label_set_text(back_label, sys_ui_str(SYS_UI_STR_BTN_BACK));
-    lv_obj_center(back_label);
     sys_ui_unlock();
     ESP_LOGI(TAG, "settings ui built");
     return ESP_OK;
 }
+
+/* ---------- 生命周期 ---------- */
 
 static esp_err_t on_init(sys_app_t *app)
 {
@@ -242,7 +314,6 @@ static esp_err_t on_init(sys_app_t *app)
         return ESP_ERR_NO_MEM;
     }
     app->priv = p;
-
     sys_event_subscribe(SYS_EVENT_TIME_TICK, on_time_tick, app, &p->tick_sub);
     return ESP_OK;
 }
@@ -283,6 +354,7 @@ static void on_stop(sys_app_t *app)
         }
         sys_ui_unlock();
     }
+    p->ui_built = false;
     free(p);
     app->priv = NULL;
     ESP_LOGI(TAG, "settings stopped");

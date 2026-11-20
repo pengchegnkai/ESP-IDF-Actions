@@ -28,6 +28,9 @@
 #include "app_splash/splash_app.h"
 #include "app_launcher/launcher_app.h"
 #include "app_settings/app_settings.h"
+#include "app_watch/watch_app.h"
+#include "app_net/app_net.h"
+#include "sys_net/sys_net.h"
 
 static const char *TAG = "main";
 
@@ -64,6 +67,17 @@ static void audio_boot_task(void *arg)
         sys_hal_audio_set_volume(audio, vol);
     } else {
         ESP_LOGW(TAG, "audio init failed, sound disabled");
+    }
+    vTaskDelete(NULL);
+}
+
+/* 网络子系统放后台任务: WiFi 协处理器 (C6 over SDIO) 初始化可能较慢,
+   不能挡住启动画面; 未初始化完成前 sys_net_* 调用会安全失败 */
+static void net_boot_task(void *arg)
+{
+    (void)arg;
+    if (sys_net_init() != ESP_OK) {
+        ESP_LOGW(TAG, "net init failed, network features disabled");
     }
     vTaskDelete(NULL);
 }
@@ -108,6 +122,8 @@ void app_main(void)
     ESP_ERROR_CHECK(sys_app_register(splash_app_get()));
     ESP_ERROR_CHECK(sys_app_register(launcher_app_get()));
     ESP_ERROR_CHECK(sys_app_register(settings_app_get()));
+    ESP_ERROR_CHECK(sys_app_register(watch_app_get()));
+    ESP_ERROR_CHECK(sys_app_register(net_app_get()));
     ESP_LOGI(TAG, "%u apps registered", (unsigned)sys_app_count());
 
     /* 5. 立即进入启动画面 (内置字体, 不依赖 SD 卡) —— 白屏到此被盖住 */
@@ -133,8 +149,9 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "UI language: %s", sys_ui_lang() == SYS_UI_LANG_ZH ? "zh" : "en");
 
-    /* 音频在后台异步初始化, 不阻塞 UI */
+    /* 音频/网络在后台异步初始化, 不阻塞 UI */
     xTaskCreate(audio_boot_task, "audio_boot", 6144, NULL, 4, NULL);
+    xTaskCreate(net_boot_task, "net_boot", 8192, NULL, 3, NULL);
 
     /* 9. 系统就绪: 启动画面进度条充满, 短暂停留后切入桌面 */
     splash_set_ready();

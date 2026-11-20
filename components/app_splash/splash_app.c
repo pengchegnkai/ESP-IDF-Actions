@@ -104,8 +104,8 @@ static void splash_tick(lv_timer_t *t)
         lv_timer_delete(t);
         p->timer = NULL;
         p->alive = false;
-        ESP_LOGI(TAG, "boot sequence done, launch %s", LAUNCHER_APP_ID);
-        sys_app_launch(LAUNCHER_APP_ID);
+        ESP_LOGI(TAG, "boot sequence done, launch %s", WATCH_APP_ID);
+        sys_app_launch(WATCH_APP_ID);
     }
 }
 

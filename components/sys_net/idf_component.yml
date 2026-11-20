@@ -1,0 +1,12 @@
+## P4 目标: WiFi 走 ESP32-C6 协处理器 (ESP-Hosted/SDIO)
+## 版本与微雪官方 04_wifistation 示例一致 (IDF >= 6.0)
+dependencies:
+  idf: ">=6.0.0"
+  espressif/esp_wifi_remote:
+    version: ">=1.6,<2.0"
+    rules:
+      - if: "target == esp32p4"
+  espressif/esp_hosted:
+    version: ">=2.12,<3.0"
+    rules:
+      - if: "target == esp32p4"

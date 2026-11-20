@@ -28,6 +28,9 @@ typedef enum {
     SYS_EVENT_NET_DOWN    = 4,  /**< 网络断开 */
     SYS_EVENT_BATTERY_LOW = 5,  /**< 低电量, data: (int)百分比 */
     SYS_EVENT_APP_STATE   = 6,  /**< APP 状态变化, data: sys_app_state_evt_t* */
+    SYS_EVENT_WIFI_STATUS = 7,  /**< WiFi 状态变化, data: const sys_net_wifi_status_t* (瞬时指针, 回调内需立即读取, 不得留存) */
+    SYS_EVENT_ESPNOW_PEER = 8,  /**< ESP-NOW 邻居数量变化, data: (int*)邻居数 */
+    SYS_EVENT_TIME_SYNCED = 9,  /**< NTP 校时成功, data: NULL */
 } sys_event_id_t;
 
 /** SYS_EVENT_APP_STATE 携带的数据 */

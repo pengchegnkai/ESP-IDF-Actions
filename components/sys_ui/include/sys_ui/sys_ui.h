@@ -87,6 +87,37 @@ typedef enum {
     SYS_UI_STR_SET_UPTIME,        /* 运行时间 */
     SYS_UI_STR_SET_LANG,          /* 设置: 语言 */
     SYS_UI_STR_SET_FONT,          /* 设置: 字库 */
+    SYS_UI_STR_APP_NET,           /* APP 名: 网络 */
+    SYS_UI_STR_NET_WIFI,          /* 网络: WiFi */
+    SYS_UI_STR_NET_WIFI_OFF,      /* WiFi: 未连接 */
+    SYS_UI_STR_NET_WIFI_CONNECTING, /* WiFi: 连接中... */
+    SYS_UI_STR_NET_WIFI_CONNECTED,  /* WiFi: 已连接 %s */
+    SYS_UI_STR_NET_WIFI_SCAN,     /* 扫描 */
+    SYS_UI_STR_NET_WIFI_SCANNING, /* 正在扫描... */
+    SYS_UI_STR_NET_WIFI_EMPTY,    /* 未扫到热点 */
+    SYS_UI_STR_NET_WIFI_OPEN,     /* 开放网络 */
+    SYS_UI_STR_NET_WIFI_LOCKED,   /* 加密网络 */
+    SYS_UI_STR_NET_WIFI_PASSWORD, /* 输入 WiFi 密码 */
+    SYS_UI_STR_BTN_CONNECT,       /* 连接 */
+    SYS_UI_STR_BTN_CANCEL,        /* 取消 */
+    SYS_UI_STR_BTN_SYNC,          /* 立即同步 */
+    SYS_UI_STR_NET_ESPNOW,        /* ESP-NOW */
+    SYS_UI_STR_NET_ESPNOW_HINT,   /* ESP-NOW 说明 */
+    SYS_UI_STR_NET_ESPNOW_PEERS,  /* 邻居设备: %d */
+    SYS_UI_STR_NET_BT,            /* 蓝牙 */
+    SYS_UI_STR_NET_BT_UNSUPPORTED,/* 蓝牙不可用说明 */
+    SYS_UI_STR_NET_TIME,          /* 时间同步 */
+    SYS_UI_STR_NET_TIME_OK,       /* 已同步 */
+    SYS_UI_STR_NET_TIME_NOSYNC,   /* 未同步 */
+    SYS_UI_STR_LAUNCHER_NOSYNC,   /* 表盘: 未校时提示 */
+    SYS_UI_STR_QC_TITLE,          /* 控制中心标题 */
+    SYS_UI_STR_WD_MON,            /* 周一 */
+    SYS_UI_STR_WD_TUE,            /* 周二 */
+    SYS_UI_STR_WD_WED,            /* 周三 */
+    SYS_UI_STR_WD_THU,            /* 周四 */
+    SYS_UI_STR_WD_FRI,            /* 周五 */
+    SYS_UI_STR_WD_SAT,            /* 周六 */
+    SYS_UI_STR_WD_SUN,            /* 周日 */
     SYS_UI_STR_COUNT
 } sys_ui_str_id_t;
 

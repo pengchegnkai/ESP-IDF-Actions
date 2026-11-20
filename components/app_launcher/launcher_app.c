@@ -1,38 +1,42 @@
 /**
  * @file launcher_app.c
- * @brief Launcher (桌面) —— APP 网格、状态栏、系统顶层弹窗演示
+ * @brief 应用列表 (Vela 应用抽屉) —— 卡片网格
+ *
+ * Vela 交互逻辑:
+ *   - 下滑 (全屏空白区)  → 表盘 (主页)
+ *   - 顶部边缘下拉        → 控制中心 (sys_ui_quickpanel)
+ *   - 点卡片             → 启动对应 APP
  */
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include "app_launcher/launcher_app.h"
 #include "app_settings/app_settings.h"
+#include "app_net/app_net.h"
+#include "app_watch/watch_app.h"
 #include "app_splash/splash_app.h"
 #include "sys_core/sys_app_manager.h"
 #include "sys_core/sys_event_bus.h"
-#include "sys_core/sys_time_service.h"
 #include "sys_ui/sys_ui.h"
+#include "sys_ui/sys_ui_theme.h"
+#include "sys_ui/sys_ui_gesture.h"
+#include "sys_ui/sys_ui_quickpanel.h"
 #include "lvgl.h"
 #include "esp_log.h"
 
 static const char *TAG = "launcher";
-/* 前向声明: APP 对象定义在文件尾, 生命周期函数在后 */
+
 static esp_err_t on_init(sys_app_t *app);
 static esp_err_t on_start(sys_app_t *app);
 static void on_suspend(sys_app_t *app);
 static void on_stop(sys_app_t *app);
 
-
 typedef struct {
     lv_obj_t *screen;
-    lv_obj_t *clock_label;
-    lv_obj_t *event_label;
     lv_obj_t *grid;
     bool ui_built;
-    sys_event_handle_t tick_sub;
-    sys_event_handle_t state_sub;
 } launcher_priv_t;
 
-/* ---------- 弹窗演示: 点"知道了"关闭 ---------- */
+/* ---------- 弹窗演示 (系统基座能力展示, 保留) ---------- */
 static void overlay_ok_cb(lv_event_t *e)
 {
     (void)e;
@@ -48,9 +52,8 @@ static void show_demo_overlay(void)
     lv_obj_set_size(content, 320, 180);
     lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(content, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_radius(content, 12, 0);
-    lv_obj_set_style_bg_color(content, lv_color_hex(0x232A31), 0);
-    /* 顶层图层不在任何屏幕之下, 中文字体需显式设置 */
+    lv_obj_set_style_radius(content, SYS_UI_THEME_RADIUS, 0);
+    lv_obj_set_style_bg_color(content, lv_color_hex(SYS_UI_THEME_CARD), 0);
     lv_font_t *f = sys_ui_cjk_font(SYS_UI_FONT_DEFAULT_PX);
     if (f) {
         lv_obj_set_style_text_font(content, f, LV_STATE_DEFAULT);
@@ -58,7 +61,7 @@ static void show_demo_overlay(void)
 
     lv_obj_t *title = lv_label_create(content);
     lv_label_set_text(title, sys_ui_str(SYS_UI_STR_OVERLAY_TITLE));
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFF6B6B), 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(SYS_UI_THEME_ERR), 0);
 
     lv_obj_t *body = lv_label_create(content);
     lv_label_set_text(body, sys_ui_str(SYS_UI_STR_OVERLAY_BODY));
@@ -71,7 +74,7 @@ static void show_demo_overlay(void)
 
     esp_err_t err = sys_ui_overlay_show(content, NULL);
     if (err != ESP_OK) {
-        lv_obj_delete(content); /* 已有弹窗时回收本次内容 */
+        lv_obj_delete(content);
     }
 }
 
@@ -81,7 +84,26 @@ static void demo_btn_cb(lv_event_t *e)
     show_demo_overlay();
 }
 
-/* ---------- APP 图标点击: 切换前台 ---------- */
+/* ---------- Vela 手势 ---------- */
+
+static void qc_open_cb(void *ctx)
+{
+    (void)ctx;
+    if (!sys_ui_quickpanel_active()) {
+        sys_ui_quickpanel_show();
+    }
+}
+
+static void on_swipe(sys_ui_swipe_dir_t dir, void *ctx)
+{
+    (void)ctx;
+    if (dir == SYS_UI_SWIPE_DOWN) {
+        sys_app_launch(WATCH_APP_ID);  /* 下滑 → 表盘 */
+    }
+}
+
+/* ---------- APP 卡片 ---------- */
+
 static void app_btn_cb(lv_event_t *e)
 {
     const char *app_id = lv_event_get_user_data(e);
@@ -90,44 +112,6 @@ static void app_btn_cb(lv_event_t *e)
     }
 }
 
-/* ---------- 事件总线回调 (运行在 sys_evt 任务上下文) ---------- */
-static void on_time_tick(int32_t event_id, void *event_data, void *user_ctx)
-{
-    (void)event_id; (void)event_data;
-    sys_app_t *self = user_ctx;
-    launcher_priv_t *p = self->priv;
-    if (!p || !p->clock_label || self->state != SYS_APP_STATE_ACTIVE) {
-        return;
-    }
-    uint32_t sec = sys_time_uptime_sec();
-    if (!sys_ui_lock()) {
-        return;
-    }
-    lv_label_set_text_fmt(p->clock_label, "%02u:%02u:%02u",
-                          (unsigned)(sec / 3600), (unsigned)(sec / 60 % 60), (unsigned)(sec % 60));
-    sys_ui_unlock();
-}
-
-static void on_system_event(int32_t event_id, void *event_data, void *user_ctx)
-{
-    (void)event_data;
-    sys_app_t *self = user_ctx;
-    launcher_priv_t *p = self->priv;
-    if (!p || !p->event_label) {
-        return;
-    }
-    static const char *names[] = {
-        "TIME_TICK", "USB_IN", "USB_OUT", "NET_UP", "NET_DOWN", "BATTERY_LOW", "APP_STATE",
-    };
-    const char *nm = (event_id >= 0 && event_id <= SYS_EVENT_APP_STATE) ? names[event_id] : "?";
-    if (!sys_ui_lock()) {
-        return;
-    }
-    lv_label_set_text_fmt(p->event_label, "%s: %s", sys_ui_str(SYS_UI_STR_LAST_EVENT), nm);
-    sys_ui_unlock();
-}
-
-/* ---------- 生命周期 ---------- */
 /* APP 显示名: 已知 APP 走 i18n, 未知 APP 回退 name 字段 */
 static const char *app_display_name(const sys_app_t *app)
 {
@@ -137,36 +121,96 @@ static const char *app_display_name(const sys_app_t *app)
     if (strcmp(app->id, SETTINGS_APP_ID) == 0) {
         return sys_ui_str(SYS_UI_STR_APP_SETTINGS);
     }
+    if (strcmp(app->id, NET_APP_ID) == 0) {
+        return sys_ui_str(SYS_UI_STR_APP_NET);
+    }
+    if (strcmp(app->id, WATCH_APP_ID) == 0) {
+        return app->name ? app->name : app->id;
+    }
     return app->name ? app->name : app->id;
+}
+
+/* 图标底色: 按 id 哈希取色 (Vela 风格多彩圆标) */
+static uint32_t app_icon_color(const char *id)
+{
+    static const uint32_t palette[] = {
+        0x4C8DFF, 0x34C759, 0xFF9F0A, 0xBF5AF2,
+        0x35C4F5, 0xFF453A, 0xFFD60A, 0x64D2FF,
+    };
+    uint32_t h = 0;
+    for (const char *s = id; *s; s++) {
+        h = h * 31 + (uint8_t)*s;
+    }
+    return palette[h % (sizeof(palette) / sizeof(palette[0]))];
 }
 
 static void build_grid(launcher_priv_t *p)
 {
     for (size_t i = 0; i < sys_app_count(); i++) {
         sys_app_t *app = sys_app_get(i);
-        /* 桌面与启动画面不是用户 APP, 不进网格 */
+        /* 桌面/表盘/启动画面不进网格 */
         if (!app || strcmp(app->id, LAUNCHER_APP_ID) == 0 ||
+            strcmp(app->id, WATCH_APP_ID) == 0 ||
             strcmp(app->id, SPLASH_APP_ID) == 0) {
             continue;
         }
-        lv_obj_t *btn = lv_button_create(p->grid);
-        lv_obj_set_size(btn, 130, 60);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0x2C6E9B), 0);
-        lv_obj_add_event_cb(btn, app_btn_cb, LV_EVENT_CLICKED, (void *)app->id);
-        lv_obj_t *label = lv_label_create(btn);
-        lv_label_set_text(label, app_display_name(app));
-        lv_obj_center(label);
+        lv_obj_t *card = lv_obj_create(p->grid);
+        lv_obj_set_size(card, 212, 150);
+        sys_ui_theme_card(card);
+        lv_obj_add_event_cb(card, app_btn_cb, LV_EVENT_CLICKED, (void *)app->id);
+        lv_obj_add_state(card, LV_STATE_DEFAULT);
+
+        /* 图标圆标 (APP 名首字符) */
+        lv_obj_t *icon = lv_obj_create(card);
+        lv_obj_set_size(icon, 64, 64);
+        lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 20);
+        lv_obj_set_style_bg_color(icon, lv_color_hex(app_icon_color(app->id)), 0);
+        lv_obj_set_style_radius(icon, 32, 0);
+        lv_obj_set_style_border_width(icon, 0, 0);
+        lv_obj_clear_flag(icon, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t *icon_lbl = lv_label_create(icon);
+        lv_label_set_text_fmt(icon_lbl, "%c",
+                              (int)(app->name && app->name[0] ? app->name[0]
+                                                              : app->id[0]));
+        lv_obj_set_style_text_font(icon_lbl, sys_ui_theme_font(30), 0);
+        lv_obj_set_style_text_color(icon_lbl, lv_color_white(), 0);
+        lv_obj_center(icon_lbl);
+
+        lv_obj_t *name_lbl = lv_label_create(card);
+        lv_label_set_text(name_lbl, app_display_name(app));
+        lv_obj_set_style_text_color(name_lbl, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+        lv_obj_set_style_text_font(name_lbl, sys_ui_theme_font(24), 0);
+        lv_obj_align(name_lbl, LV_ALIGN_BOTTOM_MID, 0, -18);
     }
 
     /* 系统弹窗演示入口 */
-    lv_obj_t *demo = lv_button_create(p->grid);
-    lv_obj_set_size(demo, 130, 60);
-    lv_obj_set_style_bg_color(demo, lv_color_hex(0x8A5A00), 0);
+    lv_obj_t *demo = lv_obj_create(p->grid);
+    lv_obj_set_size(demo, 212, 150);
+    sys_ui_theme_card(demo);
     lv_obj_add_event_cb(demo, demo_btn_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *demo_label = lv_label_create(demo);
-    lv_label_set_text(demo_label, sys_ui_str(SYS_UI_STR_BTN_DEMO));
-    lv_obj_center(demo_label);
+
+    lv_obj_t *demo_icon = lv_obj_create(demo);
+    lv_obj_set_size(demo_icon, 64, 64);
+    lv_obj_align(demo_icon, LV_ALIGN_TOP_MID, 0, 20);
+    lv_obj_set_style_bg_color(demo_icon, lv_color_hex(0xFFD60A), 0);
+    lv_obj_set_style_radius(demo_icon, 32, 0);
+    lv_obj_set_style_border_width(demo_icon, 0, 0);
+    lv_obj_clear_flag(demo_icon, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *demo_icon_lbl = lv_label_create(demo_icon);
+    lv_label_set_text(demo_icon_lbl, "i");
+    lv_obj_set_style_text_font(demo_icon_lbl, sys_ui_theme_font(30), 0);
+    lv_obj_set_style_text_color(demo_icon_lbl, lv_color_hex(0x1B2129), 0);
+    lv_obj_center(demo_icon_lbl);
+
+    lv_obj_t *demo_lbl = lv_label_create(demo);
+    lv_label_set_text(demo_lbl, sys_ui_str(SYS_UI_STR_BTN_DEMO));
+    lv_obj_set_style_text_color(demo_lbl, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(demo_lbl, sys_ui_theme_font(24), 0);
+    lv_obj_align(demo_lbl, LV_ALIGN_BOTTOM_MID, 0, -18);
 }
+
+/* ---------- UI 构建 ---------- */
 
 static esp_err_t build_ui(sys_app_t *app)
 {
@@ -175,63 +219,32 @@ static esp_err_t build_ui(sys_app_t *app)
         return ESP_FAIL;
     }
     p->screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(p->screen, lv_color_hex(0x101418), 0);
-    lv_obj_set_flex_flow(p->screen, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(p->screen, 12, 0);
+    sys_ui_theme_screen(p->screen);
+    lv_obj_clear_flag(p->screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* 状态栏 */
-    lv_obj_t *bar = lv_obj_create(p->screen);
-    lv_obj_set_size(bar, LV_PCT(100), 44);
-    lv_obj_set_style_bg_color(bar, lv_color_hex(0x1B2129), 0);
-    lv_obj_set_style_radius(bar, 8, 0);
-    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    /* 手势层: 第一个子对象 (垫底) */
+    sys_ui_swipe_layer_create(p->screen, on_swipe, app);
+    sys_ui_top_edge_create(p->screen, qc_open_cb, app);
 
-    lv_obj_t *title = lv_label_create(bar);
-    lv_label_set_text(title, sys_ui_str(SYS_UI_STR_SYSTEM_BASE_TITLE));
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE0E0E0), 0);
-    lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, 0);
-
-    /* 状态栏右侧: 运行时间标签 + 时钟 (flex 行) */
-    lv_obj_t *clock_box = lv_obj_create(bar);
-    lv_obj_set_size(clock_box, 260, 44);
-    lv_obj_clear_flag(clock_box, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(clock_box, LV_OPA_0, 0);
-    lv_obj_set_style_border_width(clock_box, 0, 0);
-    lv_obj_set_flex_flow(clock_box, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(clock_box, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(clock_box, 8, 0);
-    lv_obj_align(clock_box, LV_ALIGN_RIGHT_MID, -12, 0);
-
-    lv_obj_t *up_label = lv_label_create(clock_box);
-    lv_label_set_text(up_label, sys_ui_str(SYS_UI_STR_SET_UPTIME));
-    lv_obj_set_style_text_color(up_label, lv_color_hex(0x9AA5B1), 0);
-
-    p->clock_label = lv_label_create(clock_box);
-    lv_label_set_text(p->clock_label, "00:00:00");
-    lv_obj_set_style_text_color(p->clock_label, lv_color_hex(0x7EC8E3), 0);
-
-    /* APP 网格 */
+    /* 应用卡片网格 (2 列, 自动换行) */
     p->grid = lv_obj_create(p->screen);
-    lv_obj_set_width(p->grid, LV_PCT(100));
-    lv_obj_set_flex_grow(p->grid, 1);
+    lv_obj_set_size(p->grid, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(p->grid, LV_ALIGN_TOP_MID, 0, 32);
     lv_obj_set_flex_flow(p->grid, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_style_pad_row(p->grid, 12, 0);
-    lv_obj_set_style_pad_column(p->grid, 12, 0);
-    lv_obj_set_style_bg_opa(p->grid, LV_OPA_0, 0);
+    lv_obj_set_flex_align(p->grid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(p->grid, 20, 0);
+    lv_obj_set_style_pad_column(p->grid, 20, 0);
+    lv_obj_set_style_bg_opa(p->grid, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(p->grid, 0, 0);
+    lv_obj_set_style_pad_all(p->grid, 16, 0);
 
-    /* 事件提示 */
-    p->event_label = lv_label_create(p->screen);
-    lv_label_set_text_fmt(p->event_label, "%s: -", sys_ui_str(SYS_UI_STR_LAST_EVENT));
-    lv_obj_set_style_text_color(p->event_label, lv_color_hex(0x7EC8E3), 0);
     sys_ui_unlock();
-
-    /* 订阅系统事件 */
-    sys_event_subscribe(SYS_EVENT_TIME_TICK, on_time_tick, app, &p->tick_sub);
-    sys_event_subscribe(SYS_EVENT_APP_STATE, on_system_event, app, &p->state_sub);
-
-    ESP_LOGI(TAG, "launcher ui built");
+    ESP_LOGI(TAG, "launcher (app drawer) ui built");
     return ESP_OK;
 }
+
+/* ---------- 生命周期 ---------- */
 
 static esp_err_t on_init(sys_app_t *app)
 {
@@ -240,16 +253,12 @@ static esp_err_t on_init(sys_app_t *app)
         return ESP_ERR_NO_MEM;
     }
     app->priv = p;
-    /* on_init 只分配私有数据; 事件订阅在 build_ui 中完成,
-       注册阶段不碰 LVGL (显示锁会与适配器任务死锁) */
-    ESP_LOGI(TAG, "launcher registered as object");
     return ESP_OK;
 }
 
 static esp_err_t on_start(sys_app_t *app)
 {
     launcher_priv_t *p = app->priv;
-    /* UI 首次进前台才构建 (官方模式: 建对象必须在锁内) */
     if (!p->ui_built) {
         if (build_ui(app) != ESP_OK) {
             return ESP_FAIL;
@@ -262,7 +271,7 @@ static esp_err_t on_start(sys_app_t *app)
     }
     lv_obj_clean(p->grid);   /* 每次进前台刷新 APP 列表 (可能新增/注销) */
     build_grid(p);
-    sys_ui_set_root(p->screen);  /* 必须在锁内: 屏幕切换是 LVGL 操作 */
+    sys_ui_set_root(p->screen);
     sys_ui_unlock();
     return ESP_OK;
 }
@@ -270,7 +279,6 @@ static esp_err_t on_start(sys_app_t *app)
 static void on_suspend(sys_app_t *app)
 {
     (void)app;
-    ESP_LOGI(TAG, "launcher to background");
 }
 
 static void on_stop(sys_app_t *app)
@@ -279,8 +287,6 @@ static void on_stop(sys_app_t *app)
     if (!p) {
         return;
     }
-    sys_event_unsubscribe(p->tick_sub);
-    sys_event_unsubscribe(p->state_sub);
     if (sys_ui_lock()) {
         if (p->screen) {
             lv_obj_delete(p->screen);
@@ -290,13 +296,11 @@ static void on_stop(sys_app_t *app)
     p->ui_built = false;
     free(p);
     app->priv = NULL;
-    ESP_LOGI(TAG, "launcher stopped");
 }
 
-/* ---------- 对外: APP 对象定义 ---------- */
 static sys_app_t s_launcher = {
     .id         = LAUNCHER_APP_ID,
-    .name       = "Launcher",
+    .name       = "Apps",
     .icon       = 0,
     .on_init    = on_init,
     .on_start   = on_start,
