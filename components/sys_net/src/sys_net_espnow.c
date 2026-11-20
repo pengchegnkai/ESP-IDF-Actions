@@ -20,7 +20,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_SYS_NET_ESPNOW_ENABLE
 #include "esp_wifi.h"
 #include "esp_now.h"
 #endif
@@ -32,7 +32,7 @@ static SemaphoreHandle_t s_peer_lock;
 static sys_net_espnow_peer_t s_peers[SYS_NET_PEER_MAX];
 static int s_peer_count;
 static int s_last_reported = -1;
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_SYS_NET_ESPNOW_ENABLE
 static TaskHandle_t s_beacon_task;
 static char s_name[24];
 #endif
@@ -84,7 +84,7 @@ bool sys_net_espnow_is_active(void)
     return s_active;
 }
 
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_SYS_NET_ESPNOW_ENABLE
 
 static void on_now_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
@@ -196,7 +196,7 @@ esp_err_t sys_net_espnow_stop(void)
     return ESP_OK;
 }
 
-#else /* stub: S3/C6 独立目标 */
+#else /* stub: S3/C6 独立目标, 或 P4 未启用 SYS_NET_ESPNOW_ENABLE */
 
 esp_err_t sys_net_espnow_start(void)
 {

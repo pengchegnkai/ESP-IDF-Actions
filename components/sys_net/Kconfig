@@ -1,0 +1,15 @@
+menu "sys_net"
+
+config SYS_NET_ESPNOW_ENABLE
+    bool "Enable ESP-NOW peer discovery"
+    default n
+    help
+        ESP-NOW 邻居发现 (每秒广播本机名, 5s TTL 邻居表)。
+
+        当前 ESP-Hosted (P4 + C6 协处理器) 链路的 esp_wifi_remote
+        只注入 esp_now.h 头文件, 没有提供主机端 esp_now_* 实现,
+        打开本选项会在链接期报 undefined reference。等 esp_wifi_remote
+        正式支持 hosted ESP-NOW 后再开启; 关闭时接口返回
+        ESP_ERR_NOT_SUPPORTED, UI 上开关会自动弹回。
+
+endmenu
