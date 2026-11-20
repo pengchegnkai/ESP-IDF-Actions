@@ -160,12 +160,12 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_arc_set_value(p->sec_arc, 0);
     lv_obj_set_style_arc_width(p->sec_arc, 4, 0);
     lv_obj_set_style_arc_color(p->sec_arc, lv_color_hex(SYS_UI_THEME_PRIMARY), 0);
-    lv_obj_set_style_arc_round(p->sec_arc, true, 0);
-    lv_obj_set_style_line_round(p->sec_arc, true, 0);
+    lv_obj_set_style_arc_rounded(p->sec_arc, true, 0);
+    lv_obj_set_style_line_rounded(p->sec_arc, true, 0);
     lv_obj_set_style_arc_opa(p->sec_arc, LV_OPA_80, LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(p->sec_arc, LV_OPA_COVER, LV_PART_KNOB);
     lv_obj_set_style_bg_color(p->sec_arc, lv_color_hex(SYS_UI_THEME_TEXT), LV_PART_KNOB);
-    lv_obj_set_style_size(p->sec_arc, 6, LV_PART_KNOB);
+    lv_obj_set_style_size(p->sec_arc, 6, 6, LV_PART_KNOB);
     lv_obj_clear_flag(p->sec_arc, LV_OBJ_FLAG_CLICKABLE);
 
     p->sec_lbl = lv_label_create(clock_box);

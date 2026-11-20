@@ -86,7 +86,7 @@ static esp_err_t kbd_show(const char *ssid);
 static void kbd_priv_free(void);
 
 /* 三种模式下的键位 (4 行 x 10 列; 短行右侧键隐藏) */
-static const char *kbd_rows[kbd_mode_t][4][10] = {
+static const char *kbd_rows[KBD_MODE_SYM + 1][4][10] = {
     [KBD_MODE_BASE] = {
         {"1","2","3","4","5","6","7","8","9","0"},
         {"q","w","e","r","t","y","u","i","o","p"},
@@ -492,13 +492,14 @@ static void scan_btn_cb(lv_event_t *e)
 
 static void now_sw_cb(lv_event_t *e)
 {
-    bool on = lv_obj_has_state(e->target, LV_STATE_CHECKED);
+    lv_obj_t *sw = lv_event_get_target(e);
+    bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
     if (on) {
         if (!sys_net_wifi_is_enabled()) {
             sys_net_wifi_enable(true);
         }
         if (sys_net_espnow_start() != ESP_OK) {
-            lv_obj_remove_state(e->target, LV_STATE_CHECKED);
+            lv_obj_remove_state(sw, LV_STATE_CHECKED);
         }
     } else {
         sys_net_espnow_stop();
@@ -744,7 +745,7 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_set_width(nhint, LV_PCT(55));
     lv_label_set_long_mode(nhint, LV_LABEL_LONG_WRAP);
     p->now_peer_lbl = lv_label_create(ncard);
-    lv_label_set_text(p->now_peer_lbl, sys_ui_str(SYS_UI_STR_NET_ESPNOW_PEERS), 0);
+    lv_label_set_text_fmt(p->now_peer_lbl, sys_ui_str(SYS_UI_STR_NET_ESPNOW_PEERS), 0);
     lv_obj_set_style_text_color(p->now_peer_lbl, lv_color_hex(SYS_UI_THEME_ACCENT), 0);
     lv_obj_set_style_text_font(p->now_peer_lbl, sys_ui_theme_font(20), 0);
     lv_obj_align(p->now_peer_lbl, LV_ALIGN_RIGHT_MID, 0, 0);

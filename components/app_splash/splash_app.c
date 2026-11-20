@@ -18,6 +18,7 @@
 #include <string.h>
 #include "app_splash/splash_app.h"
 #include "app_launcher/launcher_app.h"
+#include "app_watch/watch_app.h"
 #include "sys_core/sys_app_manager.h"
 #include "sys_ui/sys_ui.h"
 #include "lvgl.h"
