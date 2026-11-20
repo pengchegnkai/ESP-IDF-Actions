@@ -38,7 +38,7 @@ static bool s_wifi_sub_on;
 
 static void wifi_sw_cb(lv_event_t *e)
 {
-    bool on = lv_obj_has_state(e->target, LV_STATE_CHECKED);
+    bool on = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
     if (sys_net_wifi_is_enabled() == on) {
         return;
     }
@@ -46,9 +46,9 @@ static void wifi_sw_cb(lv_event_t *e)
     if (err != ESP_OK) {
         /* 失败回退开关位置 */
         if (on) {
-            lv_obj_remove_state(e->target, LV_STATE_CHECKED);
+            lv_obj_remove_state(lv_event_get_target(e), LV_STATE_CHECKED);
         } else {
-            lv_obj_add_state(e->target, LV_STATE_CHECKED);
+            lv_obj_add_state(lv_event_get_target(e), LV_STATE_CHECKED);
         }
         ESP_LOGW(TAG, "wifi enable(%d) failed: %s", on, esp_err_to_name(err));
     }
@@ -56,14 +56,14 @@ static void wifi_sw_cb(lv_event_t *e)
 
 static void now_sw_cb(lv_event_t *e)
 {
-    bool on = lv_obj_has_state(e->target, LV_STATE_CHECKED);
+    bool on = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
     if (on) {
         /* ESP-NOW 与 station 共用 C6 射频, 未开 WiFi 先开 */
         if (!sys_net_wifi_is_enabled()) {
             sys_net_wifi_enable(true);
         }
         if (sys_net_espnow_start() != ESP_OK) {
-            lv_obj_remove_state(e->target, LV_STATE_CHECKED);
+            lv_obj_remove_state(lv_event_get_target(e), LV_STATE_CHECKED);
             ESP_LOGW(TAG, "esp-now start failed");
         }
     } else {
@@ -73,7 +73,7 @@ static void now_sw_cb(lv_event_t *e)
 
 static void sfx_sw_cb(lv_event_t *e)
 {
-    bool on = lv_obj_has_state(e->target, LV_STATE_CHECKED);
+    bool on = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
     sys_settings_set_sfx(on);
     if (on) {
         sys_hal_audio_beep(1200, 60);  /* 开启时试听一下 */
@@ -82,20 +82,20 @@ static void sfx_sw_cb(lv_event_t *e)
 
 static void bright_cb(lv_event_t *e)
 {
-    if (e->code != LV_EVENT_VALUE_CHANGED) {
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) {
         return;
     }
-    int v = lv_slider_get_value(e->target);
+    int v = lv_slider_get_value(lv_event_get_target(e));
     sys_settings_set_brightness(v);
     sys_hal_display_set_brightness(v);
 }
 
 static void vol_cb(lv_event_t *e)
 {
-    if (e->code != LV_EVENT_VALUE_CHANGED) {
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) {
         return;
     }
-    int v = lv_slider_get_value(e->target);
+    int v = lv_slider_get_value(lv_event_get_target(e));
     sys_settings_set_volume(v);
     sys_hal_audio_t *a = sys_hal_audio_get();
     if (a) {

@@ -25,7 +25,7 @@ typedef struct {
 
 static void on_press(lv_event_t *e)
 {
-    gesture_priv_t *g = lv_obj_get_user_data(e->target);
+    gesture_priv_t *g = lv_obj_get_user_data(lv_event_get_target(e));
     lv_indev_t *indev = lv_event_get_indev(e);
     if (!g || !indev) {
         return;
@@ -39,7 +39,7 @@ static void on_press(lv_event_t *e)
 
 static void on_release(lv_event_t *e)
 {
-    gesture_priv_t *g = lv_obj_get_user_data(e->target);
+    gesture_priv_t *g = lv_obj_get_user_data(lv_event_get_target(e));
     if (!g || !g->pressed) {
         return;
     }
@@ -82,7 +82,7 @@ static void one_dir_trampoline(sys_ui_swipe_dir_t dir, void *gctx)
 /* zone 删除时释放 priv (屏幕销毁连带释放, 防进出 APP 反复泄漏) */
 static void on_zone_delete(lv_event_t *e)
 {
-    gesture_priv_t *g = lv_obj_get_user_data(e->target);
+    gesture_priv_t *g = lv_obj_get_user_data(lv_event_get_target(e));
     if (g) {
         if (g->mode != 0) {
             free(g->ctx);  /* one_dir_priv_t */
