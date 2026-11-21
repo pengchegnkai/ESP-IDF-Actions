@@ -20,13 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build with ESP-IDF (rev3_x silicon profile)
+      - name: Build with ESP-IDF (rev3_x silicon profile + bmgr board gen)
         run: |
           set -o pipefail
           docker run --rm -v "$PWD":/project -w /project \
             -e IDF_TARGET=esp32p4 \
+            -e SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.rev3_x" \
             espressif/idf:${{ env.IDF_VERSION }} \
-            bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py -D SDKCONFIG_DEFAULTS=\"sdkconfig.defaults;sdkconfig.defaults.rev3_x\" build && idf.py merge-bin" 2>&1 | tee build_log.txt
+            bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && \
+              python -m pip install -q esp-bmgr-assist==0.8.3 && \
+              idf.py reconfigure && \
+              idf.py bmgr -b esp32_p4_wifi6_touch_lcd_4_3 && \
+              idf.py build && idf.py merge-bin" 2>&1 | tee build_log.txt
 
       # 临时诊断: 组件管理器已把 esp_board_manager 0.7.5 下载到 managed_components/
       # (runner 宿主机 DNS 解析不了注册表域名, 但 docker 容器内可以).
@@ -36,8 +41,10 @@ jobs:
         run: |
           mkdir -p diag_dump
           cp dependencies.lock diag_dump/ 2>/dev/null || true
+          cp sdkconfig diag_dump/ 2>/dev/null || true
           cp -r managed_components/espressif__esp_board_manager diag_dump/ 2>/dev/null || true
-          ls -R diag_dump | head -60
+          cp -r components/gen_bmgr_codes diag_dump/ 2>/dev/null || true
+          ls -R diag_dump | head -80
       - name: Upload diag dump
         if: always()
         uses: actions/upload-artifact@v4
