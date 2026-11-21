@@ -17,6 +17,13 @@ dependencies:
     version: ==0.7.5
     public: true
 
+  # board 组件代码直接 include esp_codec_dev.h 并使用相机/音频设备 API,
+  # 但未声明这些依赖: 工厂构建靠锁文件里的可选依赖带入, 全新解析会被跳过
+  # ("Skipping optional dependency", CI 44904312871). 显式声明保证入图.
+  espressif/esp_codec_dev:
+    version: ^1.3.0
+    public: true
+
   espressif/esp_lvgl_adapter:
     version: ^0.7.3~1
     public: true

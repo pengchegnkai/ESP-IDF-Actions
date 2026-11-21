@@ -20,39 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 临时诊断: 拉注册表清单 (定位 esp_board_manager 0.7.5 的可选依赖), 确认后移除
-      - name: Dump component registry manifests (diag)
-        run: |
-          python3 - <<'EOF'
-          import json, urllib.request
-          def get(name):
-              url = f"https://api.components.espressif.com/components/espressif/{name}"
-              req = urllib.request.Request(url, headers={"User-Agent": "ci-diag"})
-              with urllib.request.urlopen(req, timeout=60) as r:
-                  return json.load(r)
-          d = get("esp_board_manager")
-          vers = d.get("versions", [])
-          print("DIAG esp_board_manager versions:", [v["version"] for v in vers][:15])
-          for v in vers:
-              if v["version"] == "0.7.5":
-                  m = v.get("manifest", {})
-                  print("DIAG === esp_board_manager 0.7.5 dependencies ===")
-                  print(json.dumps(m.get("dependencies", {}), indent=1)[:6000])
-                  break
-          try:
-              d2 = get("esp_codec_dev")
-              v2 = d2.get("versions", [])
-              print("DIAG esp_codec_dev versions:", [v["version"] for v in v2][:15])
-          except Exception as e:
-              print("DIAG esp_codec_dev FETCH FAILED:", e)
-          try:
-              d3 = get("esp-dev")
-              v3 = d3.get("versions", [])
-              print("DIAG esp-dev versions:", [v["version"] for v in v3][:10])
-          except Exception as e:
-              print("DIAG esp-dev FETCH FAILED (may not exist):", e)
-          EOF
-
       - name: Build with ESP-IDF (rev3_x silicon profile)
         run: |
           set -o pipefail
@@ -60,6 +27,24 @@ jobs:
             -e IDF_TARGET=esp32p4 \
             espressif/idf:${{ env.IDF_VERSION }} \
             bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py -D SDKCONFIG_DEFAULTS=\"sdkconfig.defaults;sdkconfig.defaults.rev3_x\" build && idf.py merge-bin" 2>&1 | tee build_log.txt
+
+      # 临时诊断: 组件管理器已把 esp_board_manager 0.7.5 下载到 managed_components/
+      # (runner 宿主机 DNS 解析不了注册表域名, 但 docker 容器内可以).
+      # 把它的完整清单+头文件+锁文件打包上传, 用于定位缺失的可选依赖. 确认后移除.
+      - name: Save esp_board_manager dump (diag)
+        if: always()
+        run: |
+          mkdir -p diag_dump
+          cp dependencies.lock diag_dump/ 2>/dev/null || true
+          cp -r managed_components/espressif__esp_board_manager diag_dump/ 2>/dev/null || true
+          ls -R diag_dump | head -60
+      - name: Upload diag dump
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diag-dump
+          path: diag_dump/
+          if-no-files-found: warn
 
       - name: Report compile errors
         if: failure()
