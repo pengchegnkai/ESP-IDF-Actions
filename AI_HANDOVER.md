@@ -1,7 +1,8 @@
 # AI 交接文档（AI Handover）
 
-> 最后更新：2026-11-19
-> 已验证固件：**commit `a502b9e`** —— 用户已确认中文界面正常（build-31 时代）；最新版（启动画面+设置页真实功能+PSRAM 内存后端）串口日志验证全流程通过，**待用户上机确认观感**。
+> 最后更新：2026-11-21
+> 已验证固件：**build-59** —— 串口日志全流程通过（无崩溃、中文 UI、splash→表盘切换正常）。
+> 待上机验证：**build-62**（字库内嵌 fonts 分区，CI 成功、资产已下载校验）+ **build-63**（Vela 表盘重做 + 天气/OTA/FIDO2 安全密钥 + 双 OTA 分区，CI 进行中）—— 等用户板卡 USB 重连后烧录。
 >
 > 本文档写给下一个 AI/开发者：包含项目目标、架构、已验证结论、踩坑根因链、
 > 手机端工具链的确切用法、以及当前进行到一半的工作。不要依赖本文档之外的"记忆"。
@@ -14,7 +15,7 @@
 - **仓库**：`https://github.com/pengchegnkai/ESP-IDF-Actions`（branch `main`），本地路径 `~/esp-idf-gh-actions-demo/`
 - **编译**：GitHub Actions 云端编译（ESP-IDF v6.1），push 触发固定编 `esp32p4`，手动 dispatch 可选 `esp32p4`/`esp32c6`/`esp32s3`。每次成功构建自动发 Release，命名 `build-NN` 递增。
 - **烧录**：手机（Android Termux）经 USB OTG 直连板卡烧录 + 抓串口。工具链在 `~/`（见 §6、§9）。
-- **当前里程碑**：系统基座 UI 已跑通（build-29，用户确认屏幕显示正常）。下一步功能：**SD 卡字库的中文支持**（进行中，代码已写未验证）。
+- **当前里程碑**：Vela 交互系统跑通（build-59 串口验证）：深空表盘 + 应用网格 + 快捷控制中心 + WiFi/ESP-NOW + 设置；字库已可内嵌固件（fonts 分区，不依赖 SD 卡）。产品路线为"个人离线智能安全终端"三阶段：① 系统基座+Vela 交互+中文字库 ✅（build-62 待上机）② P4↔C6 SDIO 安全通道（spike 完成：esp_hosted peer_data 可行，报告见 `docs/`）③ FIDO2 双芯安全（v1 骨架已实现，真签名待阶段二通道）。
 
 ## 2. 板卡规格（微雪 ESP32-P4-WIFI6-Touch-LCD-4.3B）
 
@@ -39,23 +40,23 @@
 ```
 esp-idf-gh-actions-demo/
 ├── components/
-│   ├── sys_core/          # 系统核心
-│   │   ├── sys_app.h / sys_app_manager.*   # APP 生命周期: on_init/on_start/on_suspend/on_stop
-│   │   ├── sys_event_bus.*                 # 全局事件总线 (基于 esp_event 适配器)
-│   │   └── sys_time_service.*              # 1Hz TIME_TICK
-│   ├── sys_hal/           # 硬件抽象层 (display/touch/audio/i2c/sd)
-│   │   └── P4: 直通官方 BSP; 其他芯片: stub
-│   ├── sys_ui/            # LVGL v9 封装: 初始化/屏幕切换/顶层弹窗/字库+i18n
-│   ├── app_launcher/      # Launcher APP (桌面: APP 网格 + 状态栏 + 弹窗演示)
-│   └── app_settings/      # Settings APP (演示: 开关/USB 状态/返回)
-├── main/app_main.c        # 启动: NVS→事件总线→HAL(+SD)→UI→字库→注册APP→启动Launcher
-├── .github/workflows/build.yml
+│   ├── sys_core/          # APP 生命周期 / 事件总线 (SYS_EVENT_*: USB_IN/OUT, WEATHER, OTA, SEC_ACTIVE, ...) / 时间服务
+│   ├── sys_hal/           # P4=官方 BSP 直通 (display/touch/audio/i2c/sd) + usb (TinyUSB FIDO HID, 仅 P4); 其他芯片 stub
+│   ├── sys_ui/            # LVGL v9 封装: 屏幕切换/overlay/手势框架/主题 (sys_ui_theme)/快捷面板 (sys_ui_quickpanel)/字库+i18n/安全认证弹窗 (sys_ui_secure_dialog)
+│   ├── sys_net/           # WiFi (C6 协处理器) + 自动连接退避 + 天气服务 (sys_net_weather, wttr.in, 30min 周期)
+│   ├── sys_ota/           # 网络 OTA: GitHub Release 下载 (SHA256) + 双 OTA 分区 + 30s 回滚保护 (仅 P4)
+│   ├── secure_link/       # P4↔C6 安全通道接口 (v1 stub; 阶段二 = SDIO AES-GCM/PSK, 接口不变)
+│   ├── app_splash/ app_launcher/ app_settings/ app_watch/ (Vela 深空大数字表盘) app_net/ (WiFi/ESP-NOW/天气/OTA 卡) app_security/ (FIDO2 手动激活)
+├── main/app_main.c        # 启动 (顺序见下)
+├── partitions_p4.csv      # 双 OTA: ota_0 2MB@0x10000 / fonts 18MB@0x210000 / ota_1 2MB@0x1410000 / ota_data@0x1610000 (仅 P4; S3/C6 用 partitions.csv)
+├── .github/workflows/build.yml   # CI: push→esp32p4; 资产: merged-binary.bin + font.bin (TTF 来自仓库) + demo.bin (OTA 镜像)
+├── docs/spike-sdio-secure-channel.md  # 阶段二 spike 报告 (esp_hosted peer_data over SDIO)
 ├── sdkconfig.defaults(.esp32p4)
 └── idf_component.yml (组件级)
 ```
 
 **启动顺序（app_main.c，有依赖不可乱）**：
-1. NVS → 2. 事件总线 → 3. HAL（display/touch/i2c）→ **3.5 SD 卡挂载（失败不致命）** → 4. `sys_ui_init()` → **4.5 `sys_ui_font_init()`（SD 字库+语言判定，必须在任何 APP 建 UI 前）** → 5. 注册 APP → 6. `sys_app_launch(LAUNCHER_APP_ID)` → 音频后台任务。
+1. NVS+settings → 2. 事件总线 + APP 调度器 → 3. 显示（`sys_ui_init`，先点亮屏幕盖白屏）→ 4. 时间服务 + 注册 6 APP（splash/launcher/settings/watch/net/security）→ 5. 进 splash → 6. touch/i2c + USB FIDO（P4，失败不致命）→ **6.5 SD 卡挂载（失败不致命）** → 7. 字库（SD→fonts 分区→英文 三级回退）→ 8. 音频/网络后台任务（net 任务内：WiFi→`sys_net_weather_start`→`sys_ota_init`→`secure_link_init`）→ 9. `splash_set_ready()` + `sys_ota_boot_check()`（双 OTA 回滚保护）。
 
 **UI 线程模型（铁律）**：
 - 所有 LVGL 对象操作必须在 `sys_ui_lock()/sys_ui_unlock()` 之间（P4 上即 BSP 锁，与适配任务的 `lv_timer_handler` 互斥）。
@@ -75,6 +76,9 @@ esp-idf-gh-actions-demo/
 - ✅ 设置页真实功能：亮度/音量滑块 + 按键音效开关 + 系统信息；NVS 持久化（write-through，namespace "sys"，key: bright/vol/sfx）
 - ✅ 启动画面掩盖上电白屏：上电 ~1.9s 出 splash（此前 ~6.5s 白屏），字库加载期间持续渲染，加载完自动升中文，`splash_set_ready()` 后切桌面
 -串口日志全流程验证通过（2026-11-19）：splash 1.86s 前台 → 字库 6.5s 加载完 → 7.1s 切 launcher，无 abort/assert/WDT
+- ✅ **Vela 交互系统**（build-59，2026-11-20 串口验证）：深空表盘 + 应用网格 + 快捷控制中心（顶部边缘下拉）+ 手势框架，无崩溃、中文 UI 正常
+- ✅ **字库内嵌固件**（build-62，代码+CI 完成，待上机）：`partitions_p4.csv` 新增 fonts 18MB 分区@0x210000，TTF 入仓库，CI 发 font.bin 资产，flasher 双镜像 + md5 缓存，`sys_ui_font` 三级回退 SD→分区→英文
+- ✅ **网络/OTA/安全**（build-63，CI 进行中）：WiFi 自动连接退避（5 次）+ wttr.in 天气（30min + `SYS_EVENT_WEATHER`）+ OTA（GitHub Release，SHA256，双 OTA + 30s 回滚保护）+ FIDO2 安全密钥 v1（TinyUSB FIDO HID 0xF1D0/0x03、手动激活默认 OFF、CTAP2 GetInfo 自动应答 + MakeCredential/GetAssertion 认证弹窗）
 
 ## 5. 调试记录：黑屏 → 白屏 → 正常（根因链，按时间顺序）
 
@@ -97,7 +101,7 @@ esp-idf-gh-actions-demo/
 
 工作流（`flasher.py` 已封装全部步骤，**直接跑它**）：
 ```bash
-cd ~/ && python3 flasher.py            # 烧录 ~/merged-binary.bin（清场→探测→起桥→下载模式→烧录）
+cd ~/ && python3 flasher.py            # 双镜像: ~/merged-binary.bin + ~/font.bin@0x210000 (md5 缓存: 未变则跳过; 清场→探测→起桥→下载模式→烧录)
 ```
 
 抓串口日志（复位进应用模式 + 持续捕获 25s）：
@@ -124,14 +128,14 @@ tr -d '\r' < serial_cap.txt | grep -aE "关键词" | tail -20
 T=$(printf "protocol=https\nhost=github.com\n\n" | git credential fill 2>/dev/null | sed -n 's/^password=//p')
 ```
 
-- **固件下载必须用资产端点**（Release 级端点返回 415；github.com 直连在 Termux 不稳）：
+- **固件下载必须用资产端点**（Release 级端点返回 415；github.com 直连在 Termux 不稳）。build-62+ 有三个资产：`merged-binary.bin` + `font.bin`（17MB 中文字库）+ `demo.bin`（OTA 镜像）：
 ```bash
-curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
-  "https://api.github.com/repos/pengchegnkai/ESP-IDF-Actions/releases/assets/<asset_id>" -o merged-binary.bin
+curl -sfL -C - -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
+  "https://api.github.com/repos/pengchegnkai/ESP-IDF-Actions/releases/assets/<asset_id>" -o <name>
 ```
-  asset_id 从 `GET /releases?per_page=1` 取（取 `assets[].id`，找 `merged-binary.bin`）。
-- **网络可达性（本手机实测）**：`api.github.com` ✅（可靠，首选）、`raw.githubusercontent.com` ⚠️（时好时坏）、CDN（jsdelivr/github releases 下载）❌ 基本不可达。大文件走 **`api.github.com/git/blobs/<sha>`**（base64，限 100MB）最稳。
-- CI 状态：`GET /repos/pengchegnkai/ESP-IDF-Actions/actions/runs?per_page=1`。
+  asset_id 从 `GET /releases?per_page=1` 取（按 `assets[].name` 查）。
+- **网络可达性（本手机实测，2026-11-21 更新）**：`api.github.com` ✅（可靠，首选）；`raw.githubusercontent.com` ❌（TCP reset，拉源码改用 api `contents` 端点 + base64 解码）；资产下载**带 auth 头会 415/TCP 掐断，无认证 + `-C -`（206 断点续传）分段下载正常且快**（仓库公开，无需认证）。font.bin 可直接拷贝本地 `~/sdcard_fonts/NotoSansSC.ttf`（内容一致，md5 已核对）。
+- CI 状态：`GET /repos/pengchegnkai/ESP-IDF-Actions/actions/runs?per_page=1`；CI 日志：`GET /actions/runs/<id>/logs`（返回 ZIP）；资产 SHA256 可从 release API `assets[].digest` 取。
 
 ## 7. 未完成项（哪些还没搞完 —— 接手重点）
 
@@ -140,26 +144,23 @@ curl -sfL -H "Authorization: Bearer $T" -H "Accept: application/octet-stream" \
 中文支持（build-31 时代）已由用户确认可用；后续一系列启动崩溃的根因与修复见 §8 铁律 8-10，
 关键 commit：`3eea3b1`（事件总线分组）、`d6f5ac8`（禁 ICG）、`a502b9e`（LVGL 内存后端切 PSRAM + WHOLE_ARCHIVE）。
 
-### 7.2 【待用户确认】最新固件观感（当前卡点）
+### 7.2 【当前卡点】build-62/63 烧录 + 上机验证（等用户板卡 USB 重连）
 
-commit `a502b9e` 固件串口日志全流程通过，待用户上机确认：
-- 上电白屏是否明显缩短（预期 ~2s 内出启动画面）
-- 启动画面 → 中文切换 → 桌面的过渡观感
-- 设置页亮度/音量/音效实际效果
-- 反复进设置页/弹窗是否稳定（PSRAM 内存后端下不应再 OOM）
+- build-62 资产已下载校验：`~/merged-binary.bin`（1,666,288 B）+ `~/font.bin`（17,772,300 B，由本地 `~/sdcard_fonts/NotoSansSC.ttf` 拷贝，免下载）
+- 烧录：`cd ~/ && python3 flasher.py`（约 10 分钟，双镜像 + md5 缓存）
+- build-62 验证点：SD 卡在位 → 字库仍走 SD（行为不变）；拔卡 → 串口出 `embedded CJK font loaded from 'fonts' partition` + 中文 UI 正常
+- build-63（CI 成功后）验证点：新表盘观感 / 天气卡（需连 WiFi）/ OTA 卡 / 安全 APP（FIDO 激活开关、USB 插拔状态）/ 开机无崩溃
 
 ### 7.3 【已知小瑕疵】
 
 - S3/C6 目标的 sys_hal 仍是 stub（显示/触摸/音频降级），SD 挂载返回 `ESP_ERR_NOT_SUPPORTED`（预期行为，中文功能仅 P4 可用）。
 - `sys_ui_mem.c` 的 monitor 统计是整堆口径（PSRAM 全局），非 LVGL 独占用量。
 
-### 7.4 【远期 TODO（未开始）】
+### 7.4 【路线图 TODO（三阶段安全终端）】
 
-- WiFi 联网（esp32_c6 协处理器路径未接）
-- 音频播放/录音 API 演示（目前只有 init + volume）
-- 电量/电池管理、USB 事件源（事件 ID 已预留，无真实触发源）
-- 更多 APP、APP 间通信、持久化设置（NVS 仅 init）
-- 英文界面时 LVGL 符号图标（LV_SYMBOL_*）依赖内置字体含符号子集，若换默认字体需检查
+- **阶段二**：P4↔C6 SDIO 安全通道（spike 已通，报告 `docs/spike-sdio-secure-channel.md`）：esp_hosted **peer_data** 特性（host `eh_host_peer_data_send`，单包上限 8166B）承载整体 AES-GCM/PSK 加密；PSK 由出厂唯一 ID（eFuse MAC 只读）+ 固定盐派生，**禁熔断 eFuse**；C6 镜像需重编（官方 peer_data 示例 CP 工程为模板，NVS 已验证）；**最大风险 R1：C6 首次物理烧录路径未知**（板卡 USB 口仅 P4，C6 无独立烧录口，只能经 SDIO 通道或板厂协助）
+- **阶段三**：FIDO2 真签名：阶段二通道 + C6 侧 ECDSA-P256（私钥存 C6 NVS）+ CTAP2 完整 CBOR 应答（MakeCredential/GetAssertion、PIN/UvAuth）+ 多报告消息拼装（CTAP2 消息可 >64B）
+- 其余：音频播放/录音演示、电量管理、APP 间通信、英文界面 LVGL 符号字体检查
 
 ## 8. 代码铁律（违反必炸，血泪总结）
 
@@ -173,7 +174,12 @@ commit `a502b9e` 固件串口日志全流程通过，待用户上机确认：
 8. **P4 内部 DRAM 极其紧张（动态池仅 ~60KB）**：任何大静态数组（.bss）都可能挤爆启动期分配（32K DMA 池保留 / sleep clock ICG / REGDMA）。LVGL 内存必须走 `LV_USE_CUSTOM_MALLOC` + `sys_ui_mem.c`（全 PSRAM），**不要改回内置分配器**；`CONFIG_PM_SLEEP_CLK_ICG_ENABLE=n`（绕过 IDFGH-17859）保留。
 9. **LVGL 9.3 API 坑（与 8.x/网上资料不同）**：字体宏是 `const lv_font_t` 对象（取地址 `&lv_font_montserrat_48`，且要赋给 `const lv_font_t *`）；没有 `lv_switch_get/set_state`（用 `lv_obj_has_state/add_state` + `LV_STATE_CHECKED`）；没有 `lv_obj_set_text`（用 `lv_label_set_text`）；Kconfig 字体符号**无 USE_ 前缀**（`CONFIG_LV_FONT_MONTSERRAT_48`，库选项才带，如 `LV_USE_TINY_TTF`）。
 10. **组件反向提供符号给 lvgl（如自定义分配器 _core）必须 `WHOLE_ARCHIVE`**：静态库按需提取不会为后到的引用拉入对象，会链接期 undefined reference。
-11. **flash 32MB + 自定义分区表 `partitions.csv`（factory 2M）**：IDF 默认 single_app 只有 1M，固件已 ~1.07MB。
+11. **flash 32MB + 自定义分区表**：P4 用 `partitions_p4.csv` 双 OTA（ota_0 2MB@0x10000，fonts 18MB@0x210000，ota_1 2MB@0x1410000，ota_data 0x2000@0x1610000）；偏移算术：ota_0 末尾恰好接 fonts，**改分区时先算偏移**。S3/C6 用 `partitions.csv`（factory）。
+12. **事件总线回调跑在 "sys_evt" 任务，不持显示锁**：回调内操作 LVGL 必须显式 `sys_ui_lock()`（检查返回值）；回调 payload 指针生命周期 = 发布期间，要留存数据须自拷贝。
+13. **LVGL 9.3 补充坑**（9.5/8.x 网上资料不适用）：无 `bg_blur_size`（9.5 才有 blur_radius，发光用 shadow）；无 `LV_OPA_15`（用字面量 38）；arc 无 start/end 角度样式属性（整圆环用 `lv_arc_set_bg_angles(arc,0,360)` + `lv_arc_set_rotation(arc,270)` 从 12 点起）；`lv_obj_set_style_bg_grad` 只存 dsc 指针 → 渐变 dsc 必须长生命周期（放 priv 结构）。
+14. **IDF v6.1**：内置 `json` 组件已移除，cJSON 走托管组件 `espressif/cjson`（CMake 名 `espressif__cjson`）；hosted 不导出 `esp_wifi_is_started`；C 条件编译用 `IDF_TARGET` 变量。
+15. **P4 USB OTG（TinyUSB FIDO）**：本板 Type-C OTG 口 = P4 专用 HS OTG 引脚（USBD_P/N，芯片脚 50/49），不经 GPIO 矩阵；esp_tinyusb 2.x，FIDO HID usage page 0xF1D0/usage 0x03，64B IN/OUT；CTAP2 帧 = [channel, ccid, params]，错误帧 = [channel, 命令 CCID, err]。
+16. **锁序**：调度器锁 → 显示锁（不可反）；TinyUSB 回调（CTAP rx）跑在 USB 任务（非 LVGL 非 ISR），弹窗 show 内部自取显示锁；回调内不碰共享 UI 状态之外的东西。
 
 ## 9. 关键文件地图
 
@@ -184,8 +190,9 @@ commit `a502b9e` 固件串口日志全流程通过，待用户上机确认：
 
 ## 10. 下一步行动清单（按顺序）
 
-1. ✅ CI 编译通过（build-31 `5872ca3`）。首编译报 2 类错误（块注释内 `/*` 序列 ×2、snprintf 截断），已修复。
-2. ✅ 无字库路径上板验证通过（§7.3）：英文 UI + overlay + 触摸导航正常。
-3. **有字库路径（当前卡点，等用户）**：用户 OTG 接卡 → 文件管理器把 `/sdcard/Download/esp32-fonts/NotoSansSC.ttf` 移入卡根目录 `fonts/` 目录 → 卡装回板子重启 → 抓串口确认 `CJK font loaded ... Chinese UI` + 屏幕中文渲染（§7.3 关注点）。
-4. 中文上屏 OK 后：更新本文档 §4/§7 状态，按 §7.5 排下一个功能。
+1. ✅ build-62：字库内嵌分区（CI 成功，资产已下载校验）。
+2. **烧录 build-62**（等用户板卡 USB 重连）：`cd ~/ && python3 flasher.py` → 抓串口验证字库三级回退（SD 在位/拔卡两个场景）。
+3. **build-63**（CI 进行中）：Vela 表盘重做 + 天气/OTA/FIDO2 安全密钥 + 双 OTA 分区。CI 成功 → 下载资产 → 覆烧 → 验证各卡片 + 安全 APP + 开机无崩溃。
+4. **阶段二**：SDIO 安全通道（spike 完成）：先解决 C6 首次烧录路径（R1），再启用 esp_hosted peer_data host/CP 两侧 + PSK 派生 + AES-GCM。
+5. **阶段三**：FIDO2 真签名（C6 ECDSA + CTAP2 完整应答 + PIN/UvAuth）。
 
