@@ -3,11 +3,14 @@
 #   ota_0 与原 factory 同偏移/尺寸 (0x10000, 2MB) → merged 镜像布局不变, 烧录器照旧写 0x0
 #   fonts 偏移 0x210000 / 标签 42 不得动 (sys_ui_font.c 与烧录器依赖)
 #   回滚: CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y, sys_ota_boot_check() 延迟 30s mark valid
-#
+# 布局: nvs[0x9000+0x6000] phy_init[0xf000+0x1000] ota_0[0x10000, 2MB, →0x210000]
+#       fonts[0x210000, 18MB, →0x1410000] ota_1[0x1410000, 2MB, →0x1610000]
+#       ota_data[0x1610000, 0x2000, →0x1612000]  合计 ~21.6MB < 32MB
+# 注意: gen_esp32part 不支持字段后的行内注释, # 注释必须独占一行
 # Name,      Type, SubType, Offset,    Size
-nvs,         data, nvs,     0x9000,    0x6000       # ends 0x15000
-phy_init,    data, phy,     0xf000,    0x1000       # ends 0x10000
-ota_0,       app,  ota,     0x10000,   0x200000     # 2MB, ends 0x210000
-fonts,       data, 42,      0x210000,  0x1200000    # 18MB, ends 0x1410000
-ota_1,       app,  ota,     0x1410000, 0x200000     # 2MB, ends 0x1610000
-ota_data,    data, ota,     0x1610000, 0x2000       # ends 0x1612000 (total ~21.6MB < 32MB)
+nvs,         data, nvs,     0x9000,    0x6000
+phy_init,    data, phy,     0xf000,    0x1000
+ota_0,       app,  ota,     0x10000,   0x200000
+fonts,       data, 42,      0x210000,  0x1200000
+ota_1,       app,  ota,     0x1410000, 0x200000
+ota_data,    data, ota,     0x1610000, 0x2000
