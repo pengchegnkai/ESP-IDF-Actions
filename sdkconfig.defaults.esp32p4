@@ -10,6 +10,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_p4.csv"
 
 # ---- OTA (双 OTA 分区 + 自动回滚, 见 components/sys_ota) ----
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+# 32MB flash: ota_1/ota_data 在 16MB 以上, 24bit cache 地址映射不到 → 需 32bit 地址
+# (否则 esp_ota_get_state_partition 时 flash_mmap 报 "out of range for 24bit flash mapping")
+CONFIG_BOOTLOADER_CACHE_32BIT_ADDR_QUAD_FLASH=y
 
 # ---- USB / FIDO2 (TinyUSB, 见 sys_hal USB 层; 符号已由 security agent 核实) ----
 #
