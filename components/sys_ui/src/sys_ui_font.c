@@ -211,15 +211,9 @@ static char s_font_src[400];   /* 字库来源描述, 日志用 */
 /* 内嵌字库: 读 fonts 数据分区 (TTF 已烧进固件 0x210000) */
 static esp_err_t load_font_from_partition(void)
 {
-    const esp_partition_t *part = NULL;
-    int n = (int)esp_partition_count();
-    for (int i = 0; i < n; i++) {
-        const esp_partition_t *p = esp_partition_get(i);
-        if (p && strcmp(p->label, "fonts") == 0) {
-            part = p;
-            break;
-        }
-    }
+    /* SubType 42 必须与 partitions_p4.csv 的 fonts 行一致 */
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, 42, "fonts");
     if (!part || part->size == 0) {
         ESP_LOGI(TAG, "no 'fonts' partition, English UI");
         return ESP_ERR_NOT_FOUND;
