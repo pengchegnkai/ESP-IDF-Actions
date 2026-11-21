@@ -3,3 +3,7 @@
 # SD 卡挂载失败(空卡/未格式化)时自动 FAT 格式化, 免去手动格式化
 # (该选项来自微雪 BSP 的 Kconfig, 其他芯片目标没有此选项)
 CONFIG_BSP_SD_FORMAT_ON_MOUNT_FAIL=y
+
+# 分区表含内嵌字库 fonts 分区 (板载 32MB flash);
+# c6/s3 flash 较小, 沿用基础 sdkconfig.defaults 里的 partitions.csv
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_p4.csv"

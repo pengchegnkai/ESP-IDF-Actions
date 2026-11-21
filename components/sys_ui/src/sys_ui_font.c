@@ -3,9 +3,10 @@
  * @brief 中文字库加载与 i18n 字符串表
  *
  * 规则 (系统约定):
- *   - 启动时扫描 SD 卡 <挂载点>/fonts/ 目录下的第一个 .ttf 文件
- *   - 找到  → 读入 PSRAM, 用 LVGL tiny_ttf 按需渲染, 界面语言 = 中文
- *   - 找不到 → 回退 LVGL 内置字体 (Montserrat), 界面语言 = 英文
+ *   - 优先扫描 SD 卡 <挂载点>/fonts/ 目录下的第一个 .ttf 文件 (可换字库)
+ *   - 找不到 → 回退固件内嵌字库 (fonts 数据分区, 烧录器写入 0x210000)
+ *   - 找到任一 → 读入 PSRAM, 用 LVGL tiny_ttf 按需渲染, 界面语言 = 中文
+ *   - 都没有 → 回退 LVGL 内置字体 (Montserrat), 界面语言 = 英文
  *
  * 字库文件要求: 标准 TrueType (glyf 轮廓), 含 CJK 字形,
  * 如 Noto Sans SC / 霞鹜文楷 等。目录约定: SD 卡根下 fonts 目录中的第一个 ttf 文件
@@ -18,6 +19,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_partition.h"
 #include "sys_ui/sys_ui.h"
 #include "sys_hal/sys_hal.h"
 
@@ -204,9 +206,60 @@ static bool name_is_ttf(const char *name)
     return n > 4 && strcasecmp(name + n - 4, ".ttf") == 0;
 }
 
-esp_err_t sys_ui_font_init(void)
+static char s_font_src[400];   /* 字库来源描述, 日志用 */
+
+/* 内嵌字库: 读 fonts 数据分区 (TTF 已烧进固件 0x210000) */
+static esp_err_t load_font_from_partition(void)
 {
-    /* 1. 扫描 <挂载点>/fonts/ 下第一个 .ttf */
+    const esp_partition_t *part = NULL;
+    int n = (int)esp_partition_count();
+    for (int i = 0; i < n; i++) {
+        const esp_partition_t *p = esp_partition_get(i);
+        if (p && strcmp(p->label, "fonts") == 0) {
+            part = p;
+            break;
+        }
+    }
+    if (!part || part->size == 0) {
+        ESP_LOGI(TAG, "no 'fonts' partition, English UI");
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (part->size > TTF_MAX_SIZE) {
+        ESP_LOGE(TAG, "fonts partition too large: %u bytes", (unsigned)part->size);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    s_ttf_buf = heap_caps_malloc(part->size, MALLOC_CAP_SPIRAM);
+    if (!s_ttf_buf) {
+        ESP_LOGE(TAG, "PSRAM alloc failed for %u KB (embedded font)",
+                 (unsigned)(part->size / 1024));
+        return ESP_ERR_NO_MEM;
+    }
+    size_t off = 0;
+    while (off < part->size) {
+        size_t chunk = part->size - off;
+        if (chunk > 64 * 1024) {
+            chunk = 64 * 1024;
+        }
+        esp_err_t err = esp_partition_read(part, off, s_ttf_buf + off, chunk);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "fonts partition read failed at 0x%zx: %s", off,
+                     esp_err_to_name(err));
+            heap_caps_free(s_ttf_buf);
+            s_ttf_buf = NULL;
+            return ESP_FAIL;
+        }
+        off += chunk;
+    }
+    s_ttf_size = part->size;   /* 分区尾部擦除区不影响 TTF 解析 */
+    snprintf(s_font_src, sizeof(s_font_src), "embedded 'fonts' partition");
+    ESP_LOGI(TAG, "embedded CJK font loaded from 'fonts' partition (%u KB)",
+             (unsigned)(part->size / 1024));
+    return ESP_OK;
+}
+
+/* SD 卡字库: <挂载点>/fonts/ 下第一个 .ttf, 优先级最高 (可换字库) */
+static esp_err_t load_font_from_sd(void)
+{
     char dir[96];
     snprintf(dir, sizeof(dir), "%s/fonts", sys_hal_sd_mount_point());
 
@@ -224,11 +277,11 @@ esp_err_t sys_ui_font_init(void)
         closedir(d);
     }
     if (path[0] == '\0') {
-        ESP_LOGI(TAG, "no TTF found in %s, English UI", dir);
+        ESP_LOGI(TAG, "no TTF found in %s", dir);
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* 2. 读入 PSRAM (SD 卡首读偶发瞬时错误, 重试最多 3 次) */
+    /* 读入 PSRAM (SD 卡首读偶发瞬时错误, 重试最多 3 次) */
     FILE *f = fopen(path, "rb");
     if (!f) {
         ESP_LOGW(TAG, "fopen failed: %s", path);
@@ -272,8 +325,22 @@ esp_err_t sys_ui_font_init(void)
         return ESP_FAIL;
     }
     s_ttf_size = (size_t)sz;
+    snprintf(s_font_src, sizeof(s_font_src), "%s", path);
+    return ESP_OK;
+}
 
-    /* 3. 预建默认字号 (兼作 TTF 合法性验证), 结果存入缓存槽 0
+esp_err_t sys_ui_font_init(void)
+{
+    /* SD 卡字库优先; 失败 (无卡/无字库/读失败) 回退内嵌字库分区 */
+    esp_err_t err = load_font_from_sd();
+    if (err != ESP_OK) {
+        err = load_font_from_partition();
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* 预建默认字号 (兼作 TTF 合法性验证), 结果存入缓存槽 0
      *    LVGL 字体对象创建走 lv_malloc, 必须持显示锁与 LVGL 渲染任务互斥
      *    (新启动顺序下渲染任务此时已在跑, 启动画面正在刷新) */
     if (!sys_ui_lock()) {
@@ -284,7 +351,7 @@ esp_err_t sys_ui_font_init(void)
     s_fonts[0] = lv_tiny_ttf_create_data(s_ttf_buf, s_ttf_size, SYS_UI_FONT_DEFAULT_PX);
     sys_ui_unlock();
     if (!s_fonts[0]) {
-        ESP_LOGE(TAG, "invalid TTF: %s", path);
+        ESP_LOGE(TAG, "invalid TTF: %s", s_font_src);
         heap_caps_free(s_ttf_buf);
         s_ttf_buf = NULL;
         return ESP_FAIL;
@@ -292,6 +359,7 @@ esp_err_t sys_ui_font_init(void)
     s_font_px[0] = SYS_UI_FONT_DEFAULT_PX;
 
     s_font_ready = true;
-    ESP_LOGI(TAG, "CJK font loaded: %s (%u KB) -> Chinese UI", path, (unsigned)(sz / 1024));
+    ESP_LOGI(TAG, "CJK font ready (%u KB, %s) -> Chinese UI",
+             (unsigned)(s_ttf_size / 1024), s_font_src);
     return ESP_OK;
 }

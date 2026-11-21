@@ -1,4 +1,4 @@
-# 自定义分区表 (板载 16MB flash)
+# 默认分区表 (c6/s3 等小 flash 目标; P4 用 partitions_p4.csv, 含内嵌字库 fonts 分区)
 # factory 扩到 2M: IDF 默认 single_app 只有 1M, 本项目固件 ~1.07MB
 # (LVGL 内置字体 + TTF 解码器 + 多 APP), 2M 给后续功能留余量
 #

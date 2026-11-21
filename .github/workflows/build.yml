@@ -71,7 +71,10 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }} (${{ matrix.target }})
-          files: build/merged-binary.bin
+          # font 资产仅 P4 需要 (fonts 分区); 其他目标无此文件时跳过发布
+          files: |
+            build/merged-binary.bin
+            ${{ matrix.target == 'esp32p4' && 'assets/fonts/NotoSansSC.ttf' || '' }}
           fail_on_unmatched_files: true
 
       - name: Upload firmware artifacts

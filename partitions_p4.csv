@@ -1,0 +1,11 @@
+# ESP32-P4 专用分区表 (板载 32MB flash)
+# 与 partitions.csv 相同的 nvs/phy/factory 布局 (factory 2M), 外加 fonts 分区:
+#   中文字库内嵌固件 (NotoSansSC.ttf ~17MB), 烧录器写到 0x210000;
+#   启动时 SD 卡字库优先 (可换字库), fonts 分区内嵌字库兜底。
+# c6/s3 flash 较小, 继续用默认 partitions.csv (无 fonts 分区)。
+#
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x6000
+phy_init, data, phy,     0xf000,   0x1000
+factory,  app,  factory, 0x10000,  2M
+fonts,    data, 42,                  0x1200000
