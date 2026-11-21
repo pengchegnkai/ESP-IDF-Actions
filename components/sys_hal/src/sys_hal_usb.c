@@ -59,19 +59,15 @@ static const uint8_t s_fido_hid_desc[] = {
 };
 
 /* 配置描述符: 1 配置 / 1 HID 接口 / EP01 OUT + EP81 IN (中断, 64B, 1ms)。
- * wMaxPacketSize=64 在 FS/HS 均合法 → FS/HS 两份配置描述符同字节。 */
-#define FIDO_CFG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + 2 * TUD_ENDPOINT_DESC_LEN)
+ * 用 TinyUSB 内置 TUD_HID_INOUT_DESCRIPTOR (接口+HID 类描述符+2端点一体),
+ * 避免手拼字节出错; wMaxPacketSize=64 在 FS/HS 均合法 → FS/HS 两份配置同字节。 */
+#define FIDO_CFG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
 
 static const uint8_t s_fido_cfg_desc[] = {
     TUD_CONFIG_DESCRIPTOR(1, 1, 0, FIDO_CFG_TOTAL_LEN, 0, 100),
-    /* HID 接口: bInterfaceClass=HID, 协议=Report(1), 2 端点 */
-    9, TUSB_DESC_INTERFACE, 0, 0, 2, TUSB_CLASS_HID, 1, 0, 0,
-    /* HID 描述符: bcdHID 1.11, 国家码 1, 报告描述符长度 */
-    9, TUSB_DESC_HID, U16_TO_U8S_LE(0x0111), 1, 1, sizeof(s_fido_hid_desc),
-    /* OUT 端点 0x01 (主机→设备, CTAP 命令) */
-    7, TUSB_DESC_ENDPOINT, 0x01, 0x03, U16_TO_U8S_LE(FIDO_REPORT_LEN), 1,
-    /* IN 端点 0x81 (设备→主机, CTAP 应答) */
-    7, TUSB_DESC_ENDPOINT, 0x81, 0x03, U16_TO_U8S_LE(FIDO_REPORT_LEN), 1,
+    /* itf=0, 无字符串, boot 协议 none, 报告描述符, EP01 OUT + EP81 IN, 64B, 1ms */
+    TUD_HID_INOUT_DESCRIPTOR(0, 0, 0, sizeof(s_fido_hid_desc),
+                             0x01, 0x81, FIDO_REPORT_LEN, 1),
 };
 
 /* ---------- TinyUSB 回调 ---------- */
