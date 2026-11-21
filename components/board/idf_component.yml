@@ -10,10 +10,11 @@ dependencies:
     version: 1.0.0
     public: true
 
-  # 固定到工厂快照时代的版本: 浮动解析的新版与 board 组件代码的 API 预期不符
-  # (CI run 44891983365)
+  # board 组件代码使用 devices/ 设备抽象层 (dev_audio_codec / dev_display_lcd /
+  # periph_ledc 等类型), 0.7.5 没有这层 (CI 44911371483 编译失败).
+  # 放宽到 >=0.7.5, 注册表按 IDF 约束自动选最新兼容版本.
   espressif/esp_board_manager:
-    version: ==0.7.5
+    version: ">=0.7.5"
     public: true
 
   # board 组件代码直接 include esp_codec_dev.h (音频编解码器), 但清单未声明:
