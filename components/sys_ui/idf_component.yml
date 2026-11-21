@@ -1,4 +1,0 @@
-## LVGL v9 图形库 (managed component, 由 idf.py 自动拉取)
-dependencies:
-  idf: ">=5.3"
-  lvgl/lvgl: "^9.3"

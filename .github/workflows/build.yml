@@ -5,45 +5,28 @@ permissions:
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
-    inputs:
-      target:
-        description: '目标芯片 (只编译选中的这一款)'
-        required: true
-        default: 'esp32p4'
-        type: choice
-        options:
-          - esp32p4
-          - esp32c6
-          - esp32s3
 
 env:
-  # ESP-IDF 版本，改这一处即可（如 v5.4、v5.5.1、release/v5.5）
-  IDF_VERSION: v6.1
+  # Brookesia 工厂基座要求 IDF >=5.5,<6.0 (main/idf_component.yml)
+  # 工厂 CI 双跑 v5.5.5 / v6.0.2, 此处用工厂默认 v5.5.5
+  IDF_VERSION: v5.5.5
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # 手动触发: 编译用户选择的芯片; push/PR: 只编译默认主控芯片 esp32p4
-        # 注意: strategy 中不能用 env 上下文, 默认值必须写成字面量
-        target: ${{ fromJSON(format('["{0}"]',
-                  github.event_name == 'workflow_dispatch' && inputs.target || 'esp32p4')) }}
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build with ESP-IDF
+      - name: Build with ESP-IDF (rev3_x silicon profile)
         run: |
           set -o pipefail
           docker run --rm -v "$PWD":/project -w /project \
-            -e IDF_TARGET=${{ matrix.target }} \
-            -e APP_VER=build-${{ github.run_number }} \
+            -e IDF_TARGET=esp32p4 \
             espressif/idf:${{ env.IDF_VERSION }} \
-            bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py build && idf.py merge-bin" 2>&1 | tee build_log.txt
+            bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py -D SDKCONFIG_DEFAULTS=\"sdkconfig.defaults;sdkconfig.defaults.rev3_x\" build && idf.py merge-bin" 2>&1 | tee build_log.txt
 
       - name: Report compile errors
         if: failure()
@@ -55,14 +38,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-${{ matrix.target }}
+          name: build-log
           path: build_log.txt
 
       - name: Upload merged flash image
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: merged-flash-${{ matrix.target }}
+          name: merged-flash
           path: build/merged-binary.bin
           if-no-files-found: error
 
@@ -71,18 +54,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Build ${{ github.run_number }} (${{ matrix.target }})
-          # font 资产仅 P4 需要 (fonts 分区); demo.bin 仅 P4 OTA 需要
-          files: |
-            build/merged-binary.bin
-            ${{ matrix.target == 'esp32p4' && 'build/demo.bin' || '' }}
-            ${{ matrix.target == 'esp32p4' && 'assets/fonts/NotoSansSC.ttf' || '' }}
+          name: Build ${{ github.run_number }} (esp32p4, brookesia base)
+          files: build/merged-binary.bin
           fail_on_unmatched_files: true
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.target }}
+          name: firmware
           path: |
             build/*.bin
             build/*.elf

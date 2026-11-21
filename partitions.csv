@@ -1,8 +1,10 @@
-# 默认分区表 (c6/s3 等小 flash 目标; P4 用 partitions_p4.csv, 含内嵌字库 fonts 分区)
-# factory 扩到 2M: IDF 默认 single_app 只有 1M, 本项目固件 ~1.07MB
-# (LVGL 内置字体 + TTF 解码器 + 多 APP), 2M 给后续功能留余量
-#
-# Name,   Type, SubType, Offset,   Size
-nvs,      data, nvs,     0x9000,   0x6000
-phy_init, data, phy,     0xf000,   0x1000
-factory,  app,  factory, 0x10000,  2M
+# Name,   Type, SubType, Offset,  Size, Flags
+# Note: if you have increased the bootloader size, make sure to update the offsets to avoid overlap
+nvsfactory, data,   nvs,        ,     200K,
+nvs,        data,   nvs,        ,     840K,
+otadata,    data,   ota,        ,     0x2000,
+phy_init,   data,   phy,        ,     0x1000,
+# ESP-SR memory-maps this image; keep it below 16 MiB on Quad Flash.
+model,    data, spiffs,         ,     0xF0000,
+factory,  app,  factory,        0x00200000,     8M,
+storage,  data, spiffs,         ,     6M,

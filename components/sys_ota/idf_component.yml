@@ -1,5 +1,0 @@
-## IDF Component Manager Manifest File
-dependencies:
-  idf: ">=6.0.0"
-  # IDF v6.0 起移除内置 json 组件, cJSON 改由托管组件提供
-  espressif/cjson: "^1.7.19~2"
