@@ -31,6 +31,9 @@ typedef enum {
     SYS_EVENT_WIFI_STATUS = 7,  /**< WiFi 状态变化, data: const sys_net_wifi_status_t* (瞬时指针, 回调内需立即读取, 不得留存) */
     SYS_EVENT_ESPNOW_PEER = 8,  /**< ESP-NOW 邻居数量变化, data: (int*)邻居数 */
     SYS_EVENT_TIME_SYNCED = 9,  /**< NTP 校时成功, data: NULL */
+    SYS_EVENT_WEATHER     = 10, /**< 天气缓存更新, data: const sys_net_weather_t* (sys_net.h 定义, 稳定静态指针) */
+    SYS_EVENT_OTA         = 11, /**< OTA 阶段变化, data: const sys_ota_evt_t* (sys_ota.h 定义, stage 0..6, percent 下载进度) */
+    SYS_EVENT_SEC_ACTIVE  = 12, /**< 安全密钥激活状态, data: (int*)1=激活 0=停用 */
 } sys_event_id_t;
 
 /** SYS_EVENT_APP_STATE 携带的数据 */

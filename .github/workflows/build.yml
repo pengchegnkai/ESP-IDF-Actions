@@ -41,6 +41,7 @@ jobs:
           set -o pipefail
           docker run --rm -v "$PWD":/project -w /project \
             -e IDF_TARGET=${{ matrix.target }} \
+            -e APP_VER=build-${{ github.run_number }} \
             espressif/idf:${{ env.IDF_VERSION }} \
             bash -c "source /opt/esp/idf/export.sh >/dev/null 2>&1 && idf.py build && idf.py merge-bin" 2>&1 | tee build_log.txt
 
@@ -71,9 +72,10 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }} (${{ matrix.target }})
-          # font 资产仅 P4 需要 (fonts 分区); 其他目标无此文件时跳过发布
+          # font 资产仅 P4 需要 (fonts 分区); demo.bin 仅 P4 OTA 需要
           files: |
             build/merged-binary.bin
+            ${{ matrix.target == 'esp32p4' && 'build/demo.bin' || '' }}
             ${{ matrix.target == 'esp32p4' && 'assets/fonts/NotoSansSC.ttf' || '' }}
           fail_on_unmatched_files: true
 

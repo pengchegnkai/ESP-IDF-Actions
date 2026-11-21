@@ -30,7 +30,10 @@
 #include "app_settings/app_settings.h"
 #include "app_watch/watch_app.h"
 #include "app_net/app_net.h"
+#include "app_security/app_security.h"
 #include "sys_net/sys_net.h"
+#include "sys_ota/sys_ota.h"
+#include "secure_link/secure_link.h"
 
 static const char *TAG = "main";
 
@@ -78,7 +81,12 @@ static void net_boot_task(void *arg)
     (void)arg;
     if (sys_net_init() != ESP_OK) {
         ESP_LOGW(TAG, "net init failed, network features disabled");
+        return;
     }
+    /* WiFi 栈就绪后启动网络依赖子系统 (各自内部任务, 非 P4 目标为 stub) */
+    sys_net_weather_start();  /* 天气周期获取 (30min, WiFi 连上后自动) */
+    sys_ota_init();           /* OTA 子系统 (检查→下载→校验→安装→重启) */
+    secure_link_init();       /* 安全通道 (v1 stub; 阶段二: SDIO AES-GCM/PSK) */
     vTaskDelete(NULL);
 }
 
@@ -124,6 +132,7 @@ void app_main(void)
     ESP_ERROR_CHECK(sys_app_register(settings_app_get()));
     ESP_ERROR_CHECK(sys_app_register(watch_app_get()));
     ESP_ERROR_CHECK(sys_app_register(net_app_get()));
+    ESP_ERROR_CHECK(sys_app_register(security_app_get()));
     ESP_LOGI(TAG, "%u apps registered", (unsigned)sys_app_count());
 
     /* 5. 立即进入启动画面 (内置字体, 不依赖 SD 卡) —— 白屏到此被盖住 */
@@ -135,6 +144,11 @@ void app_main(void)
     ESP_ERROR_CHECK(sys_hal_touch_init(&TOUCH_CFG, &touch));
     if (sys_hal_i2c_init(&I2C_CFG, &i2c) != ESP_OK) {
         ESP_LOGW(TAG, "i2c init failed, peripherals unavailable");
+    }
+
+    /* USB FIDO (P4 专用: 本板 Type-C OTG 口 = P4 HS OTG 引脚; 其他目标 NOT_SUPPORTED) */
+    if (sys_hal_usb_fido_init() != ESP_OK) {
+        ESP_LOGW(TAG, "usb fido init failed, security key disabled");
     }
 
     /* 7. SD 卡 (中文字库/资源); 无卡不致命, 界面降级为英文 */
@@ -155,6 +169,7 @@ void app_main(void)
 
     /* 9. 系统就绪: 启动画面进度条充满, 短暂停留后切入桌面 */
     splash_set_ready();
+    sys_ota_boot_check();  /* 双 OTA 回滚保护: 运行 OTA 镜像且 PENDING_VERIFY 时 30s 后 mark valid */
     ESP_LOGI(TAG, "system ready, foreground app: %s",
              sys_app_current() ? sys_app_current()->id : "(none)");
 }

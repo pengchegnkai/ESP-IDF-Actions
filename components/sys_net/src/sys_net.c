@@ -9,6 +9,10 @@
  * WIFI_EVENT/IP_EVENT 回调 (默认事件循环上下文) 只更新状态快照并广播
  * 事件总线事件。状态快照用互斥锁保护; 事件 payload 是静态缓冲的指针,
  * 订阅者必须在回调内立即读取, 不得留存。
+ *
+ * 开机自动连接: sys_net_init() 给 net 任务的第一条命令是 CMD_AUTO_CONNECT ——
+ * NVS 有凭据则建栈+连接, 失败按 2/4/8/16/30s 退避重试, 共 5 次; 仍失败进入
+ * ERROR 态停止 (用户可经控制中心开关或扫描列表手动重试)。手动路径行为不变。
  */
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -113,6 +117,8 @@ typedef enum {
     CMD_ENABLE,        /* arg: bool (int) */
     CMD_CONNECT,       /* arg: connect_args_t* (一次性结构, 任务内释放) */
     CMD_SCAN,          /* arg: scan_args_t* */
+    CMD_AUTO_CONNECT,  /* 无参: 开机自动连接 (NVS 凭据 + 退避重试, 见 net_cmd_auto_connect) */
+    CMD_WX_START,      /* 无参: 拉起天气周期任务 (幂等, 实现见 sys_net_weather.c) */
 } cmd_type_t;
 
 typedef struct {
@@ -131,9 +137,11 @@ typedef struct {
     void *varg;
 } cmd_t;
 
+static bool net_stack_up(void);
 static void net_cmd_enable(bool enable);
 static void net_cmd_connect(const char *ssid, const char *pass);
 static void net_cmd_scan(const sys_net_scan_cb_t cb, void *ctx);
+static void net_cmd_auto_connect(void);
 
 static void net_task(void *arg)
 {
@@ -159,6 +167,13 @@ static void net_task(void *arg)
             free(a);
             break;
         }
+        case CMD_AUTO_CONNECT:
+            net_cmd_auto_connect();
+            break;
+        case CMD_WX_START:
+            /* 天气任务独立 (prio 3, 栈 8192), 由 net 任务统一创建 */
+            sys_net_weather_task_launch();
+            break;
         default:
             break;
         }
@@ -174,36 +189,53 @@ static esp_err_t post_cmd(cmd_type_t type, int iarg, void *varg)
 
 /* ---------- 命令实现 (net 任务上下文) ---------- */
 
+/* 建立/重启 WiFi 栈。首次调用建立 hosted 链路 (耗时数秒); stop 后再开只需
+   重新 start (mode/PS 设置跨 stop 保留, 重复设置兼作 C6 链路恢复后的兜底)。
+   失败返回 false, 调用方负责置 ERROR 态。 */
+static bool net_stack_up(void)
+{
+    if (s_wifi_started) {
+        return true;
+    }
+    static bool stack_init;
+    if (!stack_init) {
+        ESP_LOGI(TAG, "wifi stack init (hosted link up)...");
+        esp_netif_init();
+        /* 默认事件循环已在 sys_net_init 建过 (事件 handler 注册依赖它);
+           重复创建返回 INVALID_STATE, 属正常, 忽略即可 */
+        esp_event_loop_create_default();
+        esp_netif_create_default_wifi_sta();
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        if (esp_wifi_init(&cfg) != ESP_OK) {
+            return false;
+        }
+        stack_init = true;
+    }
+    if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK) {
+        return false;
+    }
+    if (esp_wifi_set_ps(WIFI_PS_MIN_MODEM) != ESP_OK) {
+        return false;
+    }
+    if (esp_wifi_start() != ESP_OK) {
+        return false;
+    }
+    s_wifi_started = true;
+    ESP_LOGI(TAG, "wifi stack up (C6 coprocessor)");
+    return true;
+}
+
 static void net_cmd_enable(bool enable)
 {
     if (enable && !s_wifi_enabled) {
         s_wifi_enabled = true;
         s_retry = 0;
-        /* 开启 WiFi: 首次调用才建栈 (hosted 链路在此建立, 耗时数秒) */
-        static bool stack_up;
-        if (!stack_up) {
-            ESP_LOGI(TAG, "wifi stack init (hosted link up)...");
-            esp_netif_init();
-            /* 默认事件循环已在 sys_net_init 建过 (事件 handler 注册依赖它);
-               重复创建返回 INVALID_STATE, 属正常, 忽略即可 */
-            esp_event_loop_create_default();
-            esp_netif_create_default_wifi_sta();
-            wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-            if (esp_wifi_init(&cfg) != ESP_OK) {
-                s_wifi_enabled = false;
-                wifi_set_state(SYS_NET_WIFI_ERROR, NULL);
-                return;
-            }
-            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-            ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
-            if (esp_wifi_start() != ESP_OK) {
-                s_wifi_enabled = false;
-                wifi_set_state(SYS_NET_WIFI_ERROR, NULL);
-                return;
-            }
-            stack_up = true;
-            s_wifi_started = true;
-            ESP_LOGI(TAG, "wifi stack up (C6 coprocessor)");
+        /* 开启 WiFi: 首次调用才建栈 (hosted 链路在此建立, 耗时数秒);
+           stop 后再开走 net_stack_up 的快速重启路径 */
+        if (!net_stack_up()) {
+            s_wifi_enabled = false;
+            wifi_set_state(SYS_NET_WIFI_ERROR, NULL);
+            return;
         }
         /* 有凭据则自动连接 */
         char ssid[SYS_NET_SSID_MAX] = {0}, pass[65] = {0};
@@ -246,6 +278,69 @@ static void net_cmd_connect(const char *ssid, const char *pass)
     }
     ESP_LOGI(TAG, "connecting to \"%s\"...", ssid);
     esp_wifi_connect();
+}
+
+/* 轮询等待"已连接且拿到 IP" (net 任务上下文)。每 200ms 回到主循环处理一次
+   命令队列, 因此等待期间不阻塞手动命令 (开关/扫描/连接)。 */
+static bool wifi_wait_connected(int timeout_ms)
+{
+    TickType_t start = xTaskGetTickCount();
+    TickType_t tout = pdMS_TO_TICKS(timeout_ms);
+    for (;;) {
+        sys_net_wifi_status_t st;
+        sys_net_wifi_get_status(&st);
+        if (st.state == SYS_NET_WIFI_CONNECTED) {
+            return true;
+        }
+        if ((TickType_t)(xTaskGetTickCount() - start) >= tout) {
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+}
+
+/* 开机自动连接: NVS 有凭据 → 建栈 + 连接; 失败按 2/4/8/16/30s 退避重试,
+   共 5 次; 仍失败置 ERROR 态并停止 (s_wifi_enabled 复位, 用户可经控制中心
+   开关或扫描列表手动重试)。状态全程经 wifi_set_state() 广播。
+   与 on_wifi_event 的断线重连并存: 每次尝试前 s_retry 清零, 事件侧的自动
+   重连在等待窗口内继续生效。 */
+static void net_cmd_auto_connect(void)
+{
+    char ssid[SYS_NET_SSID_MAX] = {0}, pass[65] = {0};
+    nvs_load_profile(ssid, sizeof(ssid), pass, sizeof(pass));
+    if (!ssid[0]) {
+        ESP_LOGI(TAG, "no saved profile, wait for manual connect");
+        return;
+    }
+    s_wifi_enabled = true;
+    if (!net_stack_up()) {
+        s_wifi_enabled = false;
+        wifi_set_state(SYS_NET_WIFI_ERROR, ssid);
+        ESP_LOGE(TAG, "wifi stack up failed, auto-connect aborted");
+        return;
+    }
+    static const int backoff_ms[5] = { 2000, 4000, 8000, 16000, 30000 };
+    for (int i = 0; i < 5; i++) {
+        if (!s_wifi_enabled) {
+            /* 用户已手动操作 (关掉了 WiFi), 中止自动连接, 保留手动状态 */
+            ESP_LOGI(TAG, "auto-connect aborted (wifi disabled by user)");
+            return;
+        }
+        s_retry = 0;
+        wifi_set_state(SYS_NET_WIFI_CONNECTING, ssid);
+        ESP_LOGI(TAG, "auto-connect to \"%s\" (attempt %d/5)", ssid, i + 1);
+        esp_wifi_connect();
+        if (wifi_wait_connected(backoff_ms[i])) {
+            ESP_LOGI(TAG, "auto-connect ok: \"%s\"", ssid);
+            return;
+        }
+        ESP_LOGW(TAG, "auto-connect attempt %d/5 timed out (%d ms)",
+                 i + 1, backoff_ms[i]);
+    }
+    s_wifi_enabled = false;
+    wifi_set_state(SYS_NET_WIFI_ERROR, ssid);
+    ESP_LOGE(TAG, "auto-connect to \"%s\" failed after 5 attempts, stop "
+                  "(user can retry manually)", ssid);
 }
 
 static void net_cmd_scan(const sys_net_scan_cb_t cb, void *ctx)
@@ -401,6 +496,9 @@ esp_err_t sys_net_init(void)
     if (xTaskCreate(net_task, "sys_net", 8192, NULL, 3, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
+    /* 开机自动连接: net 任务的第一条命令 (NVS 有凭据 → 建栈 + 退避重试;
+       无凭据则立即返回, 不影响后续手动命令) */
+    post_cmd(CMD_AUTO_CONNECT, 0, NULL);
 #else
     ESP_LOGW(TAG, "no WiFi coprocessor on this target (stub)");
 #endif
@@ -433,7 +531,7 @@ esp_err_t sys_net_wifi_connect(const char *ssid, const char *password)
     if (!s_inited || !ssid || !ssid[0]) {
         return ESP_ERR_INVALID_ARG;
     }
-    connect_args_t *a = malloc(sizeof(*a));
+    connect_args_t *a = calloc(1, sizeof(*a));
     if (!a) {
         return ESP_ERR_NO_MEM;
     }
@@ -471,6 +569,20 @@ esp_err_t sys_net_wifi_scan(sys_net_scan_cb_t cb, void *ctx)
     return err;
 #else
     (void)cb; (void)ctx;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+esp_err_t sys_net_weather_start(void)
+{
+#if CONFIG_IDF_TARGET_ESP32P4
+    if (!s_inited) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    /* 经 net 任务命令队列注册: 由 net 任务创建独立的天气任务,
+       与 esp_wifi 命令保序, 调用方不阻塞 */
+    return post_cmd(CMD_WX_START, 0, NULL);
+#else
     return ESP_ERR_NOT_SUPPORTED;
 #endif
 }

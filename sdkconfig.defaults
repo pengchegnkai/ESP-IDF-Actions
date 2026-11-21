@@ -32,6 +32,9 @@ CONFIG_WIFI_RMT_AMPDU_TX_ENABLED=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
+# OTA HTTPS 校验证书 (sys_ota 的 esp_crt_bundle_attach 依赖; IDF 默认已开, 显式锁定)
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+
 # flash 32MB (官方示例同款; BSP 默认只给 2MB, 装不下 2M factory 分区)
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 

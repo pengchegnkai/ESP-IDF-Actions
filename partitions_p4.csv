@@ -1,11 +1,13 @@
 # ESP32-P4 专用分区表 (板载 32MB flash)
-# 与 partitions.csv 相同的 nvs/phy/factory 布局 (factory 2M), 外加 fonts 分区:
-#   中文字库内嵌固件 (NotoSansSC.ttf ~17MB), 烧录器写到 0x210000;
-#   启动时 SD 卡字库优先 (可换字库), fonts 分区内嵌字库兜底。
-# c6/s3 flash 较小, 继续用默认 partitions.csv (无 fonts 分区)。
+# OTA 双分区 + fonts 内嵌中文字库 (NotoSansSC.ttf ~17MB)
+#   ota_0 与原 factory 同偏移/尺寸 (0x10000, 2MB) → merged 镜像布局不变, 烧录器照旧写 0x0
+#   fonts 偏移 0x210000 / 标签 42 不得动 (sys_ui_font.c 与烧录器依赖)
+#   回滚: CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y, sys_ota_boot_check() 延迟 30s mark valid
 #
-# Name,   Type, SubType, Offset,   Size
-nvs,      data, nvs,     0x9000,   0x6000
-phy_init, data, phy,     0xf000,   0x1000
-factory,  app,  factory, 0x10000,  2M
-fonts,    data, 42,     0x210000,  0x1200000
+# Name,      Type, SubType, Offset,    Size
+nvs,         data, nvs,     0x9000,    0x6000       # ends 0x15000
+phy_init,    data, phy,     0xf000,    0x1000       # ends 0x10000
+ota_0,       app,  ota,     0x10000,   0x200000     # 2MB, ends 0x210000
+fonts,       data, 42,      0x210000,  0x1200000    # 18MB, ends 0x1410000
+ota_1,       app,  ota,     0x1410000, 0x200000     # 2MB, ends 0x1610000
+ota_data,    data, ota,     0x1610000, 0x2000       # ends 0x1612000 (total ~21.6MB < 32MB)

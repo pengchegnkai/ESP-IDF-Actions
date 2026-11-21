@@ -118,6 +118,31 @@ typedef enum {
     SYS_UI_STR_WD_FRI,            /* 周五 */
     SYS_UI_STR_WD_SAT,            /* 周六 */
     SYS_UI_STR_WD_SUN,            /* 周日 */
+    SYS_UI_STR_WD_WEATHER,        /* 表盘: 天气 */
+    SYS_UI_STR_WD_WEATHER_FETCH,  /* 表盘: 天气获取中 */
+    SYS_UI_STR_WD_WEATHER_OFFLINE,/* 表盘: 离线无天气 */
+    SYS_UI_STR_OTA_TITLE,         /* OTA: 固件升级 */
+    SYS_UI_STR_OTA_CHECK,         /* OTA: 检查更新 */
+    SYS_UI_STR_OTA_CHECKING,      /* OTA: 检查中 */
+    SYS_UI_STR_OTA_LATEST,        /* OTA: 已是最新版本 */
+    SYS_UI_STR_OTA_NEW,           /* OTA: 发现新版本 */
+    SYS_UI_STR_OTA_DOWNLOADING,   /* OTA: 下载中 %d%% */
+    SYS_UI_STR_OTA_INSTALLING,    /* OTA: 安装完成即将重启 */
+    SYS_UI_STR_OTA_FAILED,        /* OTA: 升级失败 */
+    SYS_UI_STR_OTA_CURRENT,       /* OTA: 当前版本 %s */
+    SYS_UI_STR_SEC_TITLE,         /* 安全密钥 */
+    SYS_UI_STR_SEC_ACTIVE,        /* 安全: 已激活 */
+    SYS_UI_STR_SEC_INACTIVE,      /* 安全: 未激活 */
+    SYS_UI_STR_SEC_ACTIVATE,      /* 安全: 激活 */
+    SYS_UI_STR_SEC_DEACTIVATE,    /* 安全: 停用 */
+    SYS_UI_STR_SEC_HINT,          /* 安全: 激活后 USB FIDO2 可用 */
+    SYS_UI_STR_SEC_DIALOG_TITLE,  /* 安全认证弹窗标题 */
+    SYS_UI_STR_SEC_CONFIRM,       /* 安全弹窗: 确认 */
+    SYS_UI_STR_SEC_CANCEL,        /* 安全弹窗: 取消 */
+    SYS_UI_STR_SEC_SIGNING,       /* 安全弹窗: 正在签名 */
+    SYS_UI_STR_SEC_MAKE_CRED,     /* 安全弹窗: 注册新密钥 */
+    SYS_UI_STR_SEC_ASSERT,        /* 安全弹窗: 签名请求 */
+    SYS_UI_STR_SEC_USB_STATE,     /* 安全: USB 状态 */
     SYS_UI_STR_COUNT
 } sys_ui_str_id_t;
 

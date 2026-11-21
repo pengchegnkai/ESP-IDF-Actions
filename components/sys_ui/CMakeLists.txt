@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS "src/sys_ui.c" "src/sys_ui_font.c" "src/sys_ui_mem.c"
          "src/sys_ui_gesture.c" "src/sys_ui_quickpanel.c"
+         "src/sys_ui_secure_dialog.c"
     INCLUDE_DIRS "include"
     REQUIRES sys_core sys_hal sys_net lvgl heap
     # sys_ui_mem.c 提供 LVGL 自定义分配器 _core 符号, 由 lvgl 库反向引用;

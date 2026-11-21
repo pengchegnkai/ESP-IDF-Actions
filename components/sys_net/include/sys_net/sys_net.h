@@ -1,12 +1,13 @@
 /**
  * @file sys_net.h
- * @brief 网络子系统 —— WiFi 连接 / ESP-NOW 邻居发现 / NTP 校时
+ * @brief 网络子系统 —— WiFi 连接 / ESP-NOW 邻居发现 / NTP 校时 / 天气
  *
  * P4 目标: WiFi 由板载 ESP32-C6 协处理器经 ESP-Hosted (SDIO) 提供,
  *          本组件封装标准 esp_wifi API, 并向上通过事件总线广播状态:
  *            SYS_EVENT_WIFI_STATUS (data: sys_net_wifi_status_t*)
  *            SYS_EVENT_ESPNOW_PEER (data: int* 邻居数)
  *            SYS_EVENT_TIME_SYNCED
+ *            SYS_EVENT_WEATHER (data: const sys_net_weather_t*, 稳定静态指针)
  * S3/C6 独立目标: 全部返回 ESP_ERR_NOT_SUPPORTED (stub)。
  *
  * 线程模型: 所有 esp_wifi API 调用集中在内部 net 任务 (命令队列),
@@ -125,6 +126,41 @@ uint32_t sys_net_time_epoch(void);
  * @note  建议每秒调用一次 (APP 的 TIME_TICK 回调里); 同步只报告一次
  */
 void sys_net_time_check_and_report(void);
+
+/* ---------- 天气 (wttr.in) ---------- */
+
+/** 天气快照 (current_condition) */
+typedef struct {
+    bool valid;          /**< true = 至少成功获取过一次, temp_c/desc 有效 */
+    int16_t temp_c;      /**< 当前温度 (摄氏度) */
+    char desc[48];       /**< 天气描述 (中文; 超 47 字节截断) */
+    uint32_t age_sec;    /**< 距上次成功获取的秒数 (未成功过为 0) */
+} sys_net_weather_t;
+
+/**
+ * @brief 启动天气周期任务 (30 分钟周期; 首次获取等 WiFi 拿到 IP)
+ * @note  由 app_main 的 net 启动任务在 sys_net_init() 之后调用; 重复调用安全。
+ *        内部经 net 任务命令队列注册, 不直接建任务, 不阻塞调用方。
+ */
+esp_err_t sys_net_weather_start(void);
+
+/**
+ * @brief 立即取一次 (异步: 天气任务内执行, 不阻塞调用方, UI 可直接调用)
+ * @return ESP_OK = 已入队; ESP_ERR_INVALID_STATE = 天气任务未启动
+ */
+esp_err_t sys_net_weather_refresh(void);
+
+/**
+ * @brief 读取最新天气缓存 (非阻塞, 任意任务可调用; 未获取过 valid=false)
+ */
+esp_err_t sys_net_weather_snapshot(sys_net_weather_t *out);
+
+/**
+ * @brief [内部] 拉起天气周期任务 (幂等)
+ * @note  仅供本组件 net 任务收到 CMD_WX_START 后调用;
+ *        外部请使用 sys_net_weather_start() 走命令队列。
+ */
+void sys_net_weather_task_launch(void);
 
 #ifdef __cplusplus
 }

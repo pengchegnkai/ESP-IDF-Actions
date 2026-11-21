@@ -1,6 +1,7 @@
 /**
  * @file app_net.c
  * @brief 网络中心 APP —— WiFi 扫描/连接(带密码键盘) / ESP-NOW / 蓝牙(占位) / 校时
+ *                   / 天气 (wttr.in) / OTA 固件升级
  *
  * Vela 交互逻辑:
  *   - 顶部边缘下拉 → 控制中心;  底部边缘上滑 / 左上返回键 → 返回
@@ -17,6 +18,7 @@
 #include "sys_core/sys_time_service.h"
 #include "sys_hal/sys_hal.h"
 #include "sys_net/sys_net.h"
+#include "sys_ota/sys_ota.h"
 #include "sys_ui/sys_ui.h"
 #include "sys_ui/sys_ui_theme.h"
 #include "sys_ui/sys_ui_gesture.h"
@@ -48,11 +50,18 @@ typedef struct {
     lv_obj_t *now_peer_lbl;
     /* 时间卡 */
     lv_obj_t *time_state_lbl;
+    /* 天气卡 */
+    lv_obj_t *wx_lbl;
+    /* OTA 卡 */
+    lv_obj_t *ota_state_lbl;
+    lv_obj_t *ota_btn;
     bool ui_built;
     sys_event_handle_t wifi_sub;
     sys_event_handle_t now_sub;
     sys_event_handle_t time_sub;
     sys_event_handle_t tick_sub;
+    sys_event_handle_t wx_sub;
+    sys_event_handle_t ota_sub;
 
     /* 扫描结果缓存 (UI 行的 user_data 是索引) */
     sys_net_ap_info_t aps[SYS_NET_SCAN_MAX];
@@ -515,6 +524,41 @@ static void time_sync_cb(lv_event_t *e)
     }
 }
 
+/* ========================= 天气 / OTA ========================= */
+
+/* 天气卡内容刷新。调用方必须已持有显示锁; w 无效时显示离线提示 */
+static void weather_lbl_render(lv_obj_t *lbl, const sys_net_weather_t *w)
+{
+    if (!lbl) {
+        return;
+    }
+    if (w && w->valid) {
+        lv_label_set_text_fmt(lbl, "%d°C %s", w->temp_c, w->desc);
+    } else {
+        lv_label_set_text(lbl, sys_ui_str(SYS_UI_STR_WD_WEATHER_OFFLINE));
+    }
+}
+
+static void wx_refresh_cb(lv_event_t *e)
+{
+    (void)e;
+    /* 异步: 天气任务内执行, 不阻塞 UI; 结果经 SYS_EVENT_WEATHER 回来 */
+    esp_err_t err = sys_net_weather_refresh();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "weather refresh rejected: %s", esp_err_to_name(err));
+    }
+}
+
+static void ota_check_cb(lv_event_t *e)
+{
+    (void)e;
+    esp_err_t err = sys_ota_check_update();
+    if (err != ESP_OK) {
+        /* 检查未启动 (如 WiFi 未连), 不会有 SYS_EVENT_OTA, 按钮保持可用 */
+        ESP_LOGW(TAG, "ota check failed: %s", esp_err_to_name(err));
+    }
+}
+
 /* ========================= 事件总线 (非 LVGL 上下文) ========================= */
 
 static void on_wifi_status(int32_t event_id, void *event_data, void *user_ctx)
@@ -560,6 +604,26 @@ static void on_time_synced(int32_t event_id, void *event_data, void *user_ctx)
     sys_ui_unlock();
 }
 
+static void on_weather(int32_t event_id, void *event_data, void *user_ctx)
+{
+    (void)event_id;
+    net_priv_t *p = user_ctx;
+    if (!p || !p->wx_lbl) {
+        return;
+    }
+    const sys_net_weather_t *w = event_data;
+    if (!w) {
+        return;
+    }
+    /* 回调内拷贝 payload (指针虽稳定, 仍按事件总线约定立即读取) */
+    sys_net_weather_t local = *w;
+    if (!sys_ui_lock()) {
+        return;
+    }
+    weather_lbl_render(p->wx_lbl, &local);
+    sys_ui_unlock();
+}
+
 static void on_time_tick(int32_t event_id, void *event_data, void *user_ctx)
 {
     (void)event_id; (void)event_data;
@@ -579,6 +643,53 @@ static void on_time_tick(int32_t event_id, void *event_data, void *user_ctx)
     lv_label_set_text(p->time_state_lbl,
                       synced ? sys_ui_str(SYS_UI_STR_NET_TIME_OK)
                              : sys_ui_str(SYS_UI_STR_NET_TIME_NOSYNC));
+    sys_ui_unlock();
+}
+
+/* OTA 阶段事件: payload const sys_ota_evt_t* {int stage; int percent;}
+   stage 1-4 (检查/发现/下载/安装) 期间禁用按钮, 5 (最新) / 6 (失败) 恢复 */
+static void on_ota(int32_t event_id, void *event_data, void *user_ctx)
+{
+    (void)event_id;
+    net_priv_t *p = user_ctx;
+    if (!p || !p->ui_built || !p->ota_state_lbl || !p->ota_btn) {
+        return;
+    }
+    const sys_ota_evt_t *ev = event_data;
+    if (!ev) {
+        return;
+    }
+    if (!sys_ui_lock()) {
+        return;
+    }
+    if (ev->stage >= 1 && ev->stage <= 4) {
+        lv_obj_add_state(p->ota_btn, LV_STATE_DISABLED);
+    } else {
+        lv_obj_remove_state(p->ota_btn, LV_STATE_DISABLED);
+    }
+    switch (ev->stage) {
+    case 1:
+        lv_label_set_text(p->ota_state_lbl, sys_ui_str(SYS_UI_STR_OTA_CHECKING));
+        break;
+    case 2:
+        lv_label_set_text(p->ota_state_lbl, sys_ui_str(SYS_UI_STR_OTA_NEW));
+        break;
+    case 3:
+        lv_label_set_text_fmt(p->ota_state_lbl,
+                              sys_ui_str(SYS_UI_STR_OTA_DOWNLOADING), ev->percent);
+        break;
+    case 4:
+        lv_label_set_text(p->ota_state_lbl, sys_ui_str(SYS_UI_STR_OTA_INSTALLING));
+        break;
+    case 5:
+        lv_label_set_text(p->ota_state_lbl, sys_ui_str(SYS_UI_STR_OTA_LATEST));
+        break;
+    case 6:
+        lv_label_set_text(p->ota_state_lbl, sys_ui_str(SYS_UI_STR_OTA_FAILED));
+        break;
+    default:
+        break;
+    }
     sys_ui_unlock();
 }
 
@@ -793,6 +904,74 @@ static esp_err_t build_ui(sys_app_t *app)
     lv_obj_set_style_text_font(sync_lbl, sys_ui_theme_font(22), 0);
     lv_obj_center(sync_lbl);
 
+    /* ---------- 天气卡 (校时卡下方) ---------- */
+    lv_obj_t *wxcard = make_card(p->scroll);
+    lv_obj_t *wxrow = lv_obj_create(wxcard);
+    lv_obj_set_size(wxrow, LV_PCT(100), 48);
+    lv_obj_set_style_bg_opa(wxrow, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(wxrow, 0, 0);
+    lv_obj_clear_flag(wxrow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *wxtitle = lv_label_create(wxrow);
+    lv_label_set_text(wxtitle, sys_ui_str(SYS_UI_STR_WD_WEATHER));
+    lv_obj_set_style_text_color(wxtitle, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(wxtitle, sys_ui_theme_font(26), 0);
+    lv_obj_align(wxtitle, LV_ALIGN_LEFT_MID, 0, 0);
+    p->wx_lbl = lv_label_create(wxrow);
+    lv_label_set_text(p->wx_lbl, sys_ui_str(SYS_UI_STR_WD_WEATHER_OFFLINE));
+    lv_obj_set_style_text_color(p->wx_lbl, lv_color_hex(SYS_UI_THEME_TEXT_DIM), 0);
+    lv_obj_set_style_text_font(p->wx_lbl, sys_ui_theme_font(18), 0);
+    lv_obj_align(p->wx_lbl, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_width(p->wx_lbl, 260);
+    lv_label_set_long_mode(p->wx_lbl, LV_LABEL_LONG_DOT);
+    lv_obj_t *wx_btn = lv_button_create(wxcard);
+    lv_obj_set_size(wx_btn, 160, 48);
+    lv_obj_align(wx_btn, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_radius(wx_btn, 24, 0);
+    lv_obj_set_style_bg_color(wx_btn, lv_color_hex(SYS_UI_THEME_CARD_ALT), 0);
+    lv_obj_add_event_cb(wx_btn, wx_refresh_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *wx_btn_lbl = lv_label_create(wx_btn);
+    lv_label_set_text(wx_btn_lbl, sys_ui_str(SYS_UI_STR_BTN_SYNC));
+    lv_obj_set_style_text_color(wx_btn_lbl, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(wx_btn_lbl, sys_ui_theme_font(22), 0);
+    lv_obj_center(wx_btn_lbl);
+
+    /* ---------- OTA 卡 (天气卡下方) ---------- */
+    lv_obj_t *ocard = make_card(p->scroll);
+    lv_obj_t *orow = lv_obj_create(ocard);
+    lv_obj_set_size(orow, LV_PCT(100), 48);
+    lv_obj_set_style_bg_opa(orow, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(orow, 0, 0);
+    lv_obj_clear_flag(orow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *otitle = lv_label_create(orow);
+    lv_label_set_text(otitle, sys_ui_str(SYS_UI_STR_OTA_TITLE));
+    lv_obj_set_style_text_color(otitle, lv_color_hex(SYS_UI_THEME_TEXT), 0);
+    lv_obj_set_style_text_font(otitle, sys_ui_theme_font(26), 0);
+    lv_obj_align(otitle, LV_ALIGN_LEFT_MID, 0, 0);
+    p->ota_state_lbl = lv_label_create(orow);
+    lv_label_set_text(p->ota_state_lbl, "");
+    lv_obj_set_style_text_color(p->ota_state_lbl, lv_color_hex(SYS_UI_THEME_TEXT_DIM), 0);
+    lv_obj_set_style_text_font(p->ota_state_lbl, sys_ui_theme_font(18), 0);
+    lv_obj_align(p->ota_state_lbl, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_width(p->ota_state_lbl, 260);
+    lv_label_set_long_mode(p->ota_state_lbl, LV_LABEL_LONG_DOT);
+    lv_obj_t *over = lv_label_create(ocard);
+    lv_label_set_text_fmt(over, sys_ui_str(SYS_UI_STR_OTA_CURRENT),
+                          sys_ota_current_version());
+    lv_obj_set_style_text_color(over, lv_color_hex(SYS_UI_THEME_TEXT_DIM), 0);
+    lv_obj_set_style_text_font(over, sys_ui_theme_font(18), 0);
+    lv_obj_align(over, LV_ALIGN_LEFT_MID, 0, 0);
+    p->ota_btn = lv_button_create(ocard);
+    lv_obj_set_size(p->ota_btn, 160, 48);
+    lv_obj_align(p->ota_btn, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_radius(p->ota_btn, 24, 0);
+    lv_obj_set_style_bg_color(p->ota_btn, lv_color_hex(SYS_UI_THEME_PRIMARY), 0);
+    lv_obj_add_event_cb(p->ota_btn, ota_check_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *obtn_lbl = lv_label_create(p->ota_btn);
+    lv_label_set_text(obtn_lbl, sys_ui_str(SYS_UI_STR_OTA_CHECK));
+    lv_obj_set_style_text_color(obtn_lbl, lv_color_white(), 0);
+    lv_obj_set_style_text_font(obtn_lbl, sys_ui_theme_font(22), 0);
+    lv_obj_center(obtn_lbl);
+
     sys_ui_unlock();
 
     /* 事件订阅 (无需显示锁) */
@@ -800,6 +979,8 @@ static esp_err_t build_ui(sys_app_t *app)
     sys_event_subscribe(SYS_EVENT_ESPNOW_PEER, on_now_peer, p, &p->now_sub);
     sys_event_subscribe(SYS_EVENT_TIME_SYNCED, on_time_synced, p, &p->time_sub);
     sys_event_subscribe(SYS_EVENT_TIME_TICK, on_time_tick, app, &p->tick_sub);
+    sys_event_subscribe(SYS_EVENT_WEATHER, on_weather, p, &p->wx_sub);
+    sys_event_subscribe(SYS_EVENT_OTA, on_ota, p, &p->ota_sub);
 
     int n = 0;
     sys_net_espnow_peers(&n);
@@ -833,6 +1014,11 @@ static esp_err_t on_start(sys_app_t *app)
     }
     sys_ui_set_root(p->screen);
     wifi_card_refresh(p);
+    /* 天气卡首帧: 有缓存显示缓存, 否则离线提示 (后续 SYS_EVENT_WEATHER 更新) */
+    sys_net_weather_t wx;
+    if (sys_net_weather_snapshot(&wx) == ESP_OK) {
+        weather_lbl_render(p->wx_lbl, &wx);
+    }
     sys_ui_unlock();
     return ESP_OK;
 }
@@ -852,6 +1038,8 @@ static void on_stop(sys_app_t *app)
     sys_event_unsubscribe(p->now_sub);
     sys_event_unsubscribe(p->time_sub);
     sys_event_unsubscribe(p->tick_sub);
+    sys_event_unsubscribe(p->wx_sub);
+    sys_event_unsubscribe(p->ota_sub);
     if (s_kbd) {
         /* 对话框还开着: overlay 挂在 lv_layer_top, 先关再释放 (持锁操作) */
         if (sys_ui_lock()) {

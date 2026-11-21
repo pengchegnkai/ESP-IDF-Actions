@@ -1,6 +1,6 @@
 /**
  * @file sys_hal.h
- * @brief 硬件抽象层 —— 屏幕/触摸/音频/I2C 的统一入口
+ * @brief 硬件抽象层 —— 屏幕/触摸/音频/I2C/USB(FIDO) 的统一入口
  *
  * 每个 driver 一个 init, 成功后返回句柄; 后续 API 全部面向句柄操作,
  * 使上层 (sys_ui / apps) 不感知具体板卡 (P4 原生屏 / C6 协处理器桥接等)。
@@ -93,6 +93,32 @@ typedef struct {
 } sys_hal_i2c_cfg_t;
 
 esp_err_t sys_hal_i2c_init(const sys_hal_i2c_cfg_t *cfg, sys_hal_i2c_t **out);
+
+/* ---------- USB / FIDO (CTAP2 over HID; P4: TinyUSB HS OTG, 其他目标: 不支持) ----------
+ * 本板 Type-C "USB OTG" 口 = ESP32-P4 专用 HS OTG 引脚 (USBD_P/USBD_N, 芯片引脚
+ * 50/49, 不经 GPIO 矩阵); FIDO HID: usage page 0xF1D0 / usage 0x03, 64B IN/OUT 报告。
+ * 手动激活模式: set_active(false) (默认) 时丢弃主机 CTAP 数据, 不应答。 */
+
+/** CTAP2 帧接收回调: 运行在 TinyUSB 任务上下文; buffer 仅回调期间有效, 需自行拷贝 */
+typedef void (*sys_hal_usb_fido_rx_cb_t)(const uint8_t *data, int len, void *ctx);
+
+/**
+ * @brief 启动 TinyUSB FIDO HID 设备 (协调者接进 app_main; 幂等)
+ * @return ESP_OK 成功; 其他芯片目标 ESP_ERR_NOT_SUPPORTED
+ */
+esp_err_t sys_hal_usb_fido_init(void);
+
+/** 手动激活路由开关 (true=响应 CTAP, false=丢弃数据不应答; 默认 false) */
+void sys_hal_usb_fido_set_active(bool active);
+
+/** 注册 CTAP2 帧接收回调 (cb 传 NULL = 注销) */
+void sys_hal_usb_fido_register_rx_cb(void (*cb)(const uint8_t *data, int len, void *ctx), void *ctx);
+
+/** 当前 USB 是否已连接主机 (P4: tud_mounted(); 未 init/其他目标: false) */
+bool sys_hal_usb_fido_connected(void);
+
+/** 排入一个 CTAP2 应答 IN 报告 (len ≤ 64; 越界/未 init 丢弃) */
+void sys_hal_usb_fido_send(const uint8_t *data, int len);
 
 /* ---------- Display 互斥 (LVGL 上下文锁, 由 HAL 决定底层实现) ---------- */
 bool sys_hal_display_lock(void);   /* false = 未获锁 */
