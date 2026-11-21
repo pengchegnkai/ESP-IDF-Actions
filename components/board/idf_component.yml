@@ -10,15 +10,14 @@ dependencies:
     version: 1.0.0
     public: true
 
-  # 固定到工厂快照时代的版本: 新版不再把 esp-dev / esp_codec_dev 作为
-  # public 传递依赖, 会导致 board_camera.c (dev_camera_handle_t) 和
-  # board_audio.h (esp_codec_dev.h) 编译失败 (CI run 44891983365)
+  # 固定到工厂快照时代的版本: 浮动解析的新版与 board 组件代码的 API 预期不符
+  # (CI run 44891983365)
   espressif/esp_board_manager:
     version: ==0.7.5
     public: true
 
-  # board 组件代码直接 include esp_codec_dev.h 并使用相机/音频设备 API,
-  # 但未声明这些依赖: 工厂构建靠锁文件里的可选依赖带入, 全新解析会被跳过
+  # board 组件代码直接 include esp_codec_dev.h (音频编解码器), 但清单未声明:
+  # 工厂构建靠锁文件里的可选依赖带入, 全新解析会被跳过
   # ("Skipping optional dependency", CI 44904312871). 显式声明保证入图.
   espressif/esp_codec_dev:
     version: ^1.3.0

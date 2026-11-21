@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <mutex>
 
-#include "Camera.hpp"
 #include "SettingsStorage.hpp"
 #include "board.h"
 #include "cJSON.h"
@@ -19,7 +18,6 @@
 #include "esp_netif.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#include "esp_xiaozhi_camera.h"
 #include "sdkconfig.h"
 
 namespace esp_brookesia::apps {
@@ -27,48 +25,8 @@ namespace {
 // Leave time for the tool reply and the spoken confirmation before the restart.
 constexpr uint64_t REBOOT_DELAY_US = 3 * 1000 * 1000;
 
-std::mutex camera_mutex;
-esp_xiaozhi_chat_handle_t camera_chat = 0;
 std::mutex reboot_mutex;
 esp_timer_handle_t reboot_timer = nullptr;
-
-esp_mcp_value_t explainImage(const esp_mcp_property_list_t *properties)
-{
-    std::lock_guard<std::mutex> lock(camera_mutex);
-    if (!camera_chat) return esp_mcp_value_create_string("Camera unavailable: chat is stopped");
-    const char *question = esp_mcp_property_list_get_property_string(properties, "question");
-    if (!question || !question[0]) return esp_mcp_value_create_string("A question is required");
-    char url[256] = {};
-    char token[128] = {};
-    esp_err_t ret = esp_xiaozhi_chat_get_vision_explain(camera_chat, url, sizeof(url), token, sizeof(token));
-    if (ret != ESP_OK) return esp_mcp_value_create_string("Vision service is not available");
-    uint8_t *jpeg = nullptr;
-    size_t jpeg_len = 0;
-    ret = Camera::requestInstance()->captureJpeg(&jpeg, &jpeg_len);
-    if (ret != ESP_OK) return esp_mcp_value_create_string("Camera capture failed or camera is busy");
-    esp_xiaozhi_camera_config_t config = {};
-    config.explain_url = url;
-    config.explain_token = token;
-    esp_xiaozhi_camera_handle_t *camera = nullptr;
-    ret = esp_xiaozhi_camera_create(&config, &camera);
-    char *response = static_cast<char *>(heap_caps_calloc(1, 4096, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!response && ret == ESP_OK) ret = ESP_ERR_NO_MEM;
-    if (ret == ESP_OK) {
-        esp_xiaozhi_camera_frame_t frame = {};
-        frame.data = jpeg;
-        frame.len = jpeg_len;
-        ret = esp_xiaozhi_camera_explain(camera, &frame, question, response, 4096, nullptr);
-    }
-    if (camera) esp_xiaozhi_camera_destroy(camera);
-    free(jpeg);
-    if (ret != ESP_OK) {
-        free(response);
-        return esp_mcp_value_create_string("Vision upload failed");
-    }
-    esp_mcp_value_t result = esp_mcp_value_create_string(response);
-    free(response);
-    return result;
-}
 
 esp_mcp_value_t jsonValue(cJSON *root)
 {
@@ -260,12 +218,6 @@ esp_err_t addTool(esp_mcp_t *mcp, const char *name, const char *description,
 
 } // namespace
 
-void setXiaozhiDeveloperToolsChat(esp_xiaozhi_chat_handle_t chat)
-{
-    std::lock_guard<std::mutex> lock(camera_mutex);
-    camera_chat = chat;
-}
-
 esp_err_t registerXiaozhiDeveloperTools(esp_mcp_t *mcp)
 {
     if (!mcp) {
@@ -290,29 +242,7 @@ esp_err_t registerXiaozhiDeveloperTools(esp_mcp_t *mcp)
     if (ret != ESP_OK) return ret;
     ret = addTool(mcp, "device.get_info","Get the chip, firmware and ESP-IDF versions, display size, microphones and Wi-Fi co-processor.",getDeviceInfo);
     if (ret != ESP_OK) return ret;
-    ret = addTool(mcp, "device.system.reboot","Restart the device after a few seconds. Only call this when the user explicitly asks to restart.",reboot);
-    if (ret != ESP_OK) return ret;
-    esp_mcp_tool_t *tool = esp_mcp_tool_create("self.camera.explain_image", "Take a photo and answer a question about it.", explainImage);
-    if (!tool) return ESP_ERR_NO_MEM;
-    ret = esp_mcp_tool_set_task_support(tool, "forbidden");
-    if (ret != ESP_OK) {
-        esp_mcp_tool_destroy(tool);
-        return ret;
-    }
-    esp_mcp_property_t *question = esp_mcp_property_create("question", ESP_MCP_PROPERTY_TYPE_STRING);
-    if (!question) {
-        esp_mcp_tool_destroy(tool);
-        return ESP_ERR_NO_MEM;
-    }
-    ret = esp_mcp_tool_add_property(tool, question);
-    if (ret != ESP_OK) {
-        esp_mcp_property_destroy(question);
-        esp_mcp_tool_destroy(tool);
-        return ret;
-    }
-    ret = esp_mcp_add_tool(mcp, tool);
-    if (ret != ESP_OK) esp_mcp_tool_destroy(tool);
-    return ret;
+    return addTool(mcp, "device.system.reboot","Restart the device after a few seconds. Only call this when the user explicitly asks to restart.",reboot);
 }
 
 } // namespace esp_brookesia::apps

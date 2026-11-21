@@ -53,7 +53,7 @@ struct BootAppGroup {
 static const BootAppGroup BOOT_APP_GROUPS[] = {
     {"Loading application registry...", 65, {"DrawPanel", "Squareline"}},
     {"Loading tools...",                74, {"Calculator", "SpecAnalyzer"}},
-    {"Loading media...",                82, {"MusicPlayer", "Camera", "VideoPlayer"}},
+    {"Loading media...",                82, {"MusicPlayer", "VideoPlayer"}},
     {"Loading system applications...",  90, {"Settings", "AIChats"}},
 };
 

@@ -8,7 +8,6 @@
 
 /* Umbrella header for the board support layer. */
 #include "board_display.h"
-#include "board_camera.h"
 #include "board_audio.h"
 #include "board_storage.h"
 #include "board_wifi.h"

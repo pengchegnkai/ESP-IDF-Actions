@@ -102,11 +102,9 @@ public:
             return ret;
         }
 
-        setXiaozhiDeveloperToolsChat(_chat);
         _callbacks_enabled.store(true);
         ret = esp_xiaozhi_chat_start(_chat);
         if (ret != ESP_OK) {
-            setXiaozhiDeveloperToolsChat(0);
             _callbacks_enabled.store(false);
             (void)esp_event_handler_instance_unregister(
                 ESP_XIAOZHI_CHAT_EVENTS,
@@ -145,7 +143,6 @@ public:
         }
 
         esp_err_t ret = ESP_OK;
-        setXiaozhiDeveloperToolsChat(0);
         if (_chat != 0) {
             esp_xiaozhi_chat_handle_t chat = _chat;
             _chat = 0;

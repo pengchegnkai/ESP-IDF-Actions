@@ -1,6 +1,5 @@
 set(SRCS "")
 list(APPEND SRCS
-    "src/board_camera.c"
     "src/board_codec.c"
     "src/board_audio.c"
     "src/board_display.c"
