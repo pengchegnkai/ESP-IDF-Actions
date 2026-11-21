@@ -66,7 +66,7 @@ static void wx_fetch_once(void)
         .url = WX_URL,
         .timeout_ms = WX_HTTP_TIMEOUT_MS,
     };
-    esp_http_client *client = esp_http_client_init(&cfg);
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
         ESP_LOGW(TAG, "http client init failed (keep old cache)");
         return;
