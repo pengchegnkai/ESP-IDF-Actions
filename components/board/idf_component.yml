@@ -17,11 +17,13 @@ dependencies:
     version: ">=0.7.5"
     public: true
 
-  # board 组件代码直接 include esp_codec_dev.h (音频编解码器), 但清单未声明:
-  # 工厂构建靠锁文件里的可选依赖带入, 全新解析会被跳过
-  # ("Skipping optional dependency", CI 44904312871). 显式声明保证入图.
+  # board 组件代码直接使用 esp_codec_dev 2.x API (esp_codec_dev.h /
+  # esp_codec_dev_open 等), 且 esp_board_manager 0.7.6 的条件依赖也要求
+  # ^2.0.0-beta4 (DEV_AUDIO_CODEC_SUPPORT 时). 1.x 的 audio_codec_new 已改名
+  # (audio_codec_new_gpio), 版本错配导致 dev_audio_codec.c 编译失败
+  # (CI 44917352932). 显式声明保证入图并与 esp_board_manager 对齐.
   espressif/esp_codec_dev:
-    version: ^1.3.0
+    version: ^2.0.0-beta4
     public: true
 
   espressif/esp_lvgl_adapter:
