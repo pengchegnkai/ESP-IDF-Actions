@@ -184,7 +184,9 @@ static void net_cmd_enable(bool enable)
         if (!stack_up) {
             ESP_LOGI(TAG, "wifi stack init (hosted link up)...");
             esp_netif_init();
-            ESP_ERROR_CHECK(esp_event_loop_create_default());
+            /* 默认事件循环已在 sys_net_init 建过 (事件 handler 注册依赖它);
+               重复创建返回 INVALID_STATE, 属正常, 忽略即可 */
+            esp_event_loop_create_default();
             esp_netif_create_default_wifi_sta();
             wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
             if (esp_wifi_init(&cfg) != ESP_OK) {
