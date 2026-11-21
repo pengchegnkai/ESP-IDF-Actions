@@ -10,8 +10,11 @@ dependencies:
     version: 1.0.0
     public: true
 
+  # 固定到工厂快照时代的版本: 新版不再把 esp-dev / esp_codec_dev 作为
+  # public 传递依赖, 会导致 board_camera.c (dev_camera_handle_t) 和
+  # board_audio.h (esp_codec_dev.h) 编译失败 (CI run 44891983365)
   espressif/esp_board_manager:
-    version: ^0.7.5
+    version: ==0.7.5
     public: true
 
   espressif/esp_lvgl_adapter:
