@@ -19,13 +19,17 @@
 #include "esp_partition.h"
 #include "esp_ota_ops.h"
 #include "psa/crypto.h"   /* mbedtls 4.x: 经典 mbedtls/sha256.h 已移除, 用 PSA API */
+#include "esp_app_desc.h" /* IDF v6.1: 版本号从应用描述符读 (CI 注入 PROJECT_VER) */
 #include "cJSON.h"
 
 static const char *TAG = "sys_ota";
 
+/* IDF v6.1 无 CONFIG_APP_PROJECT_VER; 版本号由根 CMakeLists 注入 PROJECT_VER */
+#define OTA_APP_VER (esp_app_get_description()->version)
+
 const char *sys_ota_current_version(void)
 {
-    return CONFIG_APP_PROJECT_VER;
+    return OTA_APP_VER;
 }
 
 #if CONFIG_IDF_TARGET_ESP32P4
@@ -261,7 +265,7 @@ static esp_err_t ota_download(const char *url, uint8_t **out_buf,
     while (rd < clen) {
         int want = OTA_CHUNK;
         if (clen - rd < want) want = (int)(clen - rd);
-        int r = esp_http_client_read(cli, buf + rd, want);
+        int r = esp_http_client_read(cli, (char *)(buf + rd), want);
         if (r <= 0) {
             ESP_LOGE(TAG, "dl read err at %lld/%lld", (long long)rd, (long long)clen);
             psa_hash_abort(&sha);
@@ -380,7 +384,7 @@ static void ota_do_check(void)
     }
 
     /* 2. 版本门 */
-    int local = parse_build_num(CONFIG_APP_PROJECT_VER);
+    int local = parse_build_num(OTA_APP_VER);
     int remote = parse_build_num(tag);
     ESP_LOGI(TAG, "local=%d remote=%d (tag=%s)", local, remote, tag);
     if (remote <= local) {
@@ -490,7 +494,7 @@ esp_err_t sys_ota_init(void)
         return ESP_ERR_NO_MEM;
     }
     s_inited = true;
-    ESP_LOGI(TAG, "init (ver: %s)", CONFIG_APP_PROJECT_VER);
+    ESP_LOGI(TAG, "init (ver: %s)", OTA_APP_VER);
     return ESP_OK;
 }
 
@@ -503,8 +507,10 @@ esp_err_t sys_ota_check_update(void)
 
 void sys_ota_boot_check(void)
 {
+    /* 仅 OTA 槽有 img state (factory 无 otadata 条目, get_state 返回非 OK);
+     * IDF v6.1 已移除 ESP_PARTITION_SUBTYPE_APP_OTA 合写宏, 不再显式判子类型 */
     const esp_partition_t *running = esp_ota_get_running_partition();
-    if (!running || running->subtype != ESP_PARTITION_SUBTYPE_APP_OTA) return;
+    if (!running) return;
 
     esp_ota_img_states_t st;
     if (esp_ota_get_state_partition(running, &st) != ESP_OK) return;

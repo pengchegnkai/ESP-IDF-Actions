@@ -7,6 +7,7 @@ set(sys_ota_reqs
     esp_http_client
     espressif__cjson
     app_update
+    esp_app_format
     esp_partition
     # IDF v6.1: esp_crt_bundle 已并入 mbedtls 组件 (esp_crt_bundle.h /
     # esp_crt_bundle_attach 均由 mbedtls 提供, 独立组件名不再存在)
