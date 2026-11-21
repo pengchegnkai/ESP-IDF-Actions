@@ -18,7 +18,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_partition.h"
 #include "esp_ota_ops.h"
-#include "mbedtls/sha256.h"
+#include "psa/crypto.h"   /* mbedtls 4.x: 经典 mbedtls/sha256.h 已移除, 用 PSA API */
 #include "cJSON.h"
 
 static const char *TAG = "sys_ota";
@@ -243,10 +243,16 @@ static esp_err_t ota_download(const char *url, uint8_t **out_buf,
         return ESP_ERR_NO_MEM;
     }
 
-    /* 流式 SHA256 */
-    mbedtls_sha256_context sha;
-    mbedtls_sha256_init(&sha);
-    mbedtls_sha256_starts(&sha, 0);
+    /* 流式 SHA256 (PSA multipart; IDF v6.1 mbedtls 4.x 无经典 sha256 接口) */
+    psa_hash_operation_t sha = PSA_HASH_OPERATION_INIT;
+    if (psa_crypto_init() != PSA_SUCCESS ||
+        psa_hash_setup(&sha, PSA_ALG_SHA_256) != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "psa sha setup failed");
+        heap_caps_free(buf);
+        esp_http_client_close(cli);
+        esp_http_client_cleanup(cli);
+        return ESP_FAIL;
+    }
 
     ota_publish(3, 0);
 
@@ -258,14 +264,21 @@ static esp_err_t ota_download(const char *url, uint8_t **out_buf,
         int r = esp_http_client_read(cli, buf + rd, want);
         if (r <= 0) {
             ESP_LOGE(TAG, "dl read err at %lld/%lld", (long long)rd, (long long)clen);
-            mbedtls_sha256_free(&sha);
+            psa_hash_abort(&sha);
             heap_caps_free(buf);
             esp_http_client_close(cli);
             esp_http_client_cleanup(cli);
             return ESP_FAIL;
         }
         rd += r;
-        mbedtls_sha256_update(&sha, buf + rd - r, (size_t)r);
+        if (psa_hash_update(&sha, buf + rd - r, (size_t)r) != PSA_SUCCESS) {
+            ESP_LOGE(TAG, "sha update failed");
+            psa_hash_abort(&sha);
+            heap_caps_free(buf);
+            esp_http_client_close(cli);
+            esp_http_client_cleanup(cli);
+            return ESP_FAIL;
+        }
 
         int pct = (int)(rd * 100 / clen);
         if (pct != last_pct) {
@@ -275,8 +288,15 @@ static esp_err_t ota_download(const char *url, uint8_t **out_buf,
     }
 
     uint8_t result[32];
-    mbedtls_sha256_finish(&sha, result);
-    mbedtls_sha256_free(&sha);
+    size_t hash_len = 0;
+    psa_status_t fin = psa_hash_finish(&sha, result, sizeof(result), &hash_len);
+    if (fin != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "sha finish failed: %d", (int)fin);
+        heap_caps_free(buf);
+        esp_http_client_close(cli);
+        esp_http_client_cleanup(cli);
+        return ESP_FAIL;
+    }
     memcpy(sha_out, result, 32);
 
     esp_http_client_close(cli);

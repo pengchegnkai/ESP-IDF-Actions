@@ -74,13 +74,13 @@ static void btn_cb(lv_event_t *e)
             lv_label_set_text(s_detail_lbl, sys_ui_str(SYS_UI_STR_SEC_SIGNING));
         }
         if (s_btn_row) {
-            lv_obj_add_flag(s_btn_row, LV_OBJ_FLAG_DISABLED);
+            lv_obj_add_state(s_btn_row, LV_STATE_DISABLED);
         }
         s_timer = lv_timer_create(finish_timer_cb, SEC_SIGN_DELAY_MS,
                                   (void *)(intptr_t)true);
     } else {
         if (s_btn_row) {
-            lv_obj_add_flag(s_btn_row, LV_OBJ_FLAG_DISABLED);
+            lv_obj_add_state(s_btn_row, LV_STATE_DISABLED);
         }
         finish(false);
     }
