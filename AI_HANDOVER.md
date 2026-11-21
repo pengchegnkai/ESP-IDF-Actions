@@ -26,12 +26,27 @@
 - 构建: IDF **v5.5.5**（`main/idf_component.yml` 要求 `>=5.5,<6.0`）；
   **必须** `SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.rev3_x"`
   （rev3_x = REV_MIN_300 + SPIRAM_SPEED_250M；跨版本档抄时钟设置 → 面板时序错）
+- **依赖版本（勿动, 10 轮 CI 排障后固化, 详见「CI 依赖排障记录」）**:
+  `components/board/idf_component.yml`:
+  - `espressif/esp_board_manager: >=0.7.5` → 解析 0.7.6（有 devices/ 设备抽象层；
+    0.7.5 没有, board 代码的 dev_*/periph_* 类型会 unknown）
+  - `espressif/esp_codec_dev: ^2.0.0-beta4` → 解析 2.0.0-beta5（board 代码与
+    esp_board_manager 0.7.6 都按 2.x API 编写；1.x 的 audio_codec_new 已改名）
+- **sdkconfig.defaults.rev3_x 含 11 个 ESP_BOARD_*_SUPPORT 最小集**（伞头
+  esp_board_manager_includes.h 按 Kconfig 门控包含设备头, 全默认 n；
+  **勿全量启用**——P4 无 DAC 硬件, 0.7.6 periph_dac.c 是 IDF6-only API）
 - CI: `.github/workflows/build.yml` — docker `espressif/idf:v5.5.5`，
-  `idf.py build && idf.py merge-bin`，release 资产 `build/merged-binary.bin`（tag `build-N`）
+  流程: `pip install esp-bmgr-assist==0.8.3 && idf.py reconfigure &&
+  idf.py bmgr -b esp32_p4_wifi6_touch_lcd_4_3 && idf.py build && idf.py merge-bin`
+  （bmgr 从 waveshare_boards 0.2.0 板卡定义生成 components/gen_bmgr_codes/ 设备表,
+  README 工厂流程; g_esp_board_* 符号是生成代码）；
+  release 资产 `build/merged-binary.bin`（tag `build-N`）
 - 分区 (32MB): nvs/nvsfactory + otadata + phy_init + model(ESP-SR, 960K) +
   **factory app 8M @0x200000** + storage SPIFFS 6M；**单 factory 分区，无双 OTA**
 - 出厂 APP: DrawPanel / Squareline / Calculator / SpecAnalyzer / MusicPlayer /
-  Camera / VideoPlayer / Settings / AIChats(小智)
+  VideoPlayer / Settings / AIChats(小智)
+  （Camera 已移除: 用户板卡未装摄像头；含 XiaozhiApp 的 explain_image 视觉 MCP 工具
+  与 setXiaozhiDeveloperToolsChat 接口，commit 2a978b2/9a87aee）
 
 ## APP 模型（移植参考）
 
@@ -43,6 +58,40 @@
 - 开机安装顺序 + 主屏图标顺序: `main/main.cpp` 的 `BOOT_APP_GROUPS`
 - 板级 API: `board_display_start` / `board_wifi_service_init` (adf_event) /
   `board_codec_init` / `board_spiffs_mount`
+
+## CI 依赖排障记录（2026-11-21, 10 轮, 已全部固化）
+
+导入工厂快照后 CI 连续失败, 每轮定位一层（run id 为 GitHub Actions）:
+
+| # | run | 症状 | 根因 | 修复 |
+|---|-----|------|------|------|
+| 1 | 44891983365 | `dev_camera_handle_t` / `esp_codec_dev.h` 缺失 | `^0.7.5` 浮动解析, optional 依赖未入图 | 钉 `==0.7.5` (1955fa9) |
+| 2 | 44904312871 | 同上 + "Skipping optional dependency" | 无锁文件 fresh 解析跳过 board_manager 的 optional 依赖 | 显式声明 esp_codec_dev (后续轮次) |
+| 3 | 44907636631 | 诊断步骤失败 | runner 宿主机 DNS 解析不了注册表域名（docker 容器内可以） | 诊断改打包 managed_components 上传 artifact |
+| 4 | 44909794843 | 仍 dev_camera_handle_t | 0.7.5 确实缺类型 | — (转向移除摄像头) |
+| 5 | 44910757511 | CMake: Failed to resolve component 'Camera' | 移除 Camera 后 XiaozhiApp CMakeLists PRIV_REQUIRES 漏改 | 移除 Camera 依赖 (9a87aee) |
+| 6 | 44911371483 | `dev_audio_codec_handles_t` 等 unknown | **0.7.5 无 devices/ 设备抽象层**（源码在 espressif/esp-board-manager 仓库） | 版本放宽 `>=0.7.5` → 0.7.6 (7f90d59) |
+| 7 | 44913800275 | 同上 | 0.7.6 有 devices 层, 但伞头 `esp_board_manager_includes.h` 按 Kconfig 门控, 58 个 `*_SUPPORT` 全默认 n | 先全量启用 58 项 (d4b0fc2) |
+| 8 | 44915985902 | `periph_dac.c: dac_oneshot_*` unknown | **P4 无 DAC 硬件**; 全量启用踩中 IDF6-only 驱动 | 改 11 项最小集 (7031c2c) |
+| 9 | 44917352932 | `audio_codec_new` implicit declaration | esp_codec_dev 钉 1.3.x, 但 board 代码与 0.7.6 都是 **2.x API** | 改 `^2.0.0-beta4` (fbd9fd0) |
+| 10 | 44918326316 | 链接: `g_esp_board_*` 4 个符号 undefined | 设备表是**生成代码**: 缺 `idf.py bmgr -b <board>` 生成步骤 | CI 补 esp-bmgr-assist + bmgr (3cd5718) |
+
+**最小 Kconfig 集（sdkconfig.defaults.rev3_x, 11 项）**:
+- 设备: `DEV_DISPLAY_LCD`(+`SUB_DSI`) / `DEV_AUDIO_CODEC` / `DEV_LEDC_CTRL` / `DEV_LCD_TOUCH`(+`SUB_I2C`)
+- 外设: `PERIPH_ADC` / `PERIPH_I2C` / `PERIPH_I2S` / `PERIPH_LEDC` / `PERIPH_SPI`
+- 推导方法: 全树 grep `dev_*/periph_*` 实际引用 + 0.7.6 各设备驱动的传递依赖闭包
+
+**bmgr 生成机制**: `g_esp_board_devices` / `g_esp_board_peripherals` /
+`g_esp_board_device_handles` / `g_esp_board_periph_handles` 四个设备表符号由
+`gen_bmgr_config_codes.py` 从板卡定义（waveshare_boards 0.2.0 组件）生成到
+`components/gen_bmgr_codes/`。esp_board_manager 0.7.6 的 `idf_ext.py`（提供
+`idf.py bmgr` 命令）只在 IDF 6.0+ 自动加载, IDF 5.5 需 `pip install
+esp-bmgr-assist==0.8.3`（README 工厂流程）。
+
+**排查工具链**: CI 诊断步骤把 `managed_components/espressif__esp_board_manager`
++ `dependencies.lock` + `sdkconfig` + `components/gen_bmgr_codes` 打包上传
+`diag-dump` artifact, 本地可解压直接读源码/清单定位问题（runner 宿主机连不了
+注册表, 但组件管理器已在容器内下载完整组件）。
 
 ## 待办（分批移植）
 
