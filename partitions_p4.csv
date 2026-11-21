@@ -8,4 +8,4 @@
 nvs,      data, nvs,     0x9000,   0x6000
 phy_init, data, phy,     0xf000,   0x1000
 factory,  app,  factory, 0x10000,  2M
-fonts,    data, 42,                  0x1200000
+fonts,    data, 42,     0x210000,  0x1200000
