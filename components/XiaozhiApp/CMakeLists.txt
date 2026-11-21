@@ -41,7 +41,6 @@ idf_component_register(
         esp_websocket_client
         esp_wifi
         esp_wifi_remote
-        Camera
         Settings
         mbedtls
         mcp-c-sdk
