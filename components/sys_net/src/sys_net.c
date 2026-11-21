@@ -382,6 +382,15 @@ esp_err_t sys_net_init(void)
     if (!s_cmd_q) {
         return ESP_ERR_NO_MEM;
     }
+    /* 默认事件循环必须先建: WIFI_EVENT/IP_EVENT 都挂在上面,
+       未建时 esp_event_handler_register 返回 INVALID_STATE 导致 abort。
+       已存在时返回 INVALID_STATE, 忽略即可 */
+    esp_netif_init();
+    esp_err_t err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "event loop create failed: %s", esp_err_to_name(err));
+        return err;
+    }
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                on_wifi_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT,

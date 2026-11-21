@@ -14,6 +14,8 @@
 #include <string.h>
 #include <strings.h>
 #include <dirent.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "sys_ui/sys_ui.h"
@@ -226,7 +228,7 @@ esp_err_t sys_ui_font_init(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    /* 2. 读入 PSRAM */
+    /* 2. 读入 PSRAM (SD 卡首读偶发瞬时错误, 重试最多 3 次) */
     FILE *f = fopen(path, "rb");
     if (!f) {
         ESP_LOGW(TAG, "fopen failed: %s", path);
@@ -237,22 +239,34 @@ esp_err_t sys_ui_font_init(void)
         return ESP_FAIL;
     }
     long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    fclose(f);
     if (sz <= 0 || (size_t)sz > TTF_MAX_SIZE) {
         ESP_LOGE(TAG, "bad font size %ld (limit %u MB)", sz, TTF_MAX_SIZE / (1024 * 1024));
-        fclose(f);
         return ESP_ERR_INVALID_SIZE;
     }
     s_ttf_buf = heap_caps_malloc(sz, MALLOC_CAP_SPIRAM);
     if (!s_ttf_buf) {
         ESP_LOGE(TAG, "PSRAM alloc failed for %zu KB", sz / 1024);
-        fclose(f);
         return ESP_ERR_NO_MEM;
     }
-    size_t rd = fread(s_ttf_buf, 1, (size_t)sz, f);
-    fclose(f);
+    size_t rd = 0;
+    for (int try = 0; try < 3; try++) {
+        f = fopen(path, "rb");
+        if (!f) {
+            ESP_LOGW(TAG, "fopen retry failed: %s", path);
+            break;
+        }
+        fseek(f, 0, SEEK_SET);
+        rd = fread(s_ttf_buf, 1, (size_t)sz, f);
+        fclose(f);
+        if (rd == (size_t)sz) {
+            break;
+        }
+        ESP_LOGW(TAG, "fread short: %zu/%ld (try %d/3)", rd, sz, try + 1);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
     if (rd != (size_t)sz) {
-        ESP_LOGE(TAG, "fread short: %zu/%ld", rd, sz);
+        ESP_LOGE(TAG, "fread short after retries: %zu/%ld", rd, sz);
         heap_caps_free(s_ttf_buf);
         s_ttf_buf = NULL;
         return ESP_FAIL;
