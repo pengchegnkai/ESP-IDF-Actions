@@ -145,12 +145,12 @@ static void sec_sw_cb(lv_event_t *e)
 /* ---------- CTAP2 处理 ---------- */
 
 /* 确认弹窗结果: 由 sys_ui_secure_dialog 在 LVGL 上下文调用 (弹窗已关闭, 持显示锁) */
-static void on_dialog_result(bool confirmed, void *ctx)
+static bool on_dialog_result(bool confirmed, void *ctx)
 {
     sys_app_t *app = ctx;
     sec_priv_t *p = app ? app->priv : NULL;
     if (!p) {
-        return;  /* APP 已退出 */
+        return false;  /* APP 已退出 */
     }
     uint8_t resp[3];
     int n;
@@ -189,6 +189,7 @@ static void on_dialog_result(bool confirmed, void *ctx)
     p->processing = false;
     p->pending_op = 0;
     ESP_LOGI(TAG, "ctap response sent (%d bytes)", n);
+    return true;
 }
 
 /* CTAP2 帧接收回调: 运行在 TinyUSB 任务上下文 (非 LVGL, 非 ISR) */
