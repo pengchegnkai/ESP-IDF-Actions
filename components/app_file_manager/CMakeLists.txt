@@ -22,7 +22,7 @@ idf_component_register(
         ${SRCS_HAL}
         ${SRCS_ASSETS}
         "app_file_manager.cpp"
-    INCLUDE_DIRS "."
+    INCLUDE_DIRS "." "core" "ui"
     REQUIRES
         board
         brookesia_core

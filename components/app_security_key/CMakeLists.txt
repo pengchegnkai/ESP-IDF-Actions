@@ -10,7 +10,7 @@ idf_component_register(
         "hal/hal_c6_crypto.c"
         "hal/hal_usb_ctap.c"
         "app_security_key.cpp"
-    INCLUDE_DIRS "."
+    INCLUDE_DIRS "." "core" "ui"
     REQUIRES
         usb_arbiter        # 红线③: USB 互斥
         board              # C6 协处理器信息 (board_wifi)
