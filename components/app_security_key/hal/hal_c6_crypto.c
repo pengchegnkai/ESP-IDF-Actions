@@ -100,22 +100,23 @@ static int hkdf_sha256(const uint8_t *salt, size_t salt_len,
     if (!salt) { salt = zeros; salt_len = 32; }
     if (mbedtls_md_hmac(md, salt, salt_len, ikm, ikm_len, prk) != 0) return -1;
 
-    /* Expand: T(i) = HMAC(PRK, T(i-1) || info || i) */
+    /* Expand: T(i) = HMAC(PRK, T(i-1) || info || i) — mbedtls 3.x 流式 API */
     uint8_t t[32];
     size_t t_len = 0, pos = 0;
     uint8_t counter = 1;
     while (pos < out_len) {
-        mbedtls_md_hmac_ctx_t h;
-        mbedtls_md_hmac_init(&h);
-        if (mbedtls_md_hmac_setup(&h, md) != 0 ||
+        mbedtls_md_context_t h;
+        mbedtls_md_init(&h);
+        if (mbedtls_md_setup(&h, md, 1) != 0 ||
+            mbedtls_md_hmac_starts(&h, prk, 32) != 0 ||
             mbedtls_md_hmac_update(&h, t, t_len) != 0 ||
             mbedtls_md_hmac_update(&h, info, info_len) != 0 ||
             mbedtls_md_hmac_update(&h, &counter, 1) != 0 ||
             mbedtls_md_hmac_finish(&h, t) != 0) {
-            mbedtls_md_hmac_free(&h);
+            mbedtls_md_free(&h);
             return -1;
         }
-        mbedtls_md_hmac_free(&h);
+        mbedtls_md_free(&h);
         size_t take = (out_len - pos < 32) ? (out_len - pos) : 32;
         memcpy(out + pos, t, take);
         pos += take;
