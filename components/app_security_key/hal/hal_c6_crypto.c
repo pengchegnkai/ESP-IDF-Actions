@@ -74,17 +74,17 @@ static esp_err_t sk_gcm_crypt(const uint8_t *in, size_t len, const uint8_t *nonc
 {
     /* TODO(lead#3): key 来自会话派生 (derive_session_key), 此处占位:
      * 真实实现保存 mbedtls_gcm_context/句柄并 setkey 一次. */
-    mbedtls_gcm_ctx ctx;
+    mbedtls_gcm_context ctx; /* 注意: 类型名是 context (无 ctx 缩写) */
     mbedtls_gcm_init(&ctx);
     /* TODO(lead#4): key 来自会话派生 (derive_session_key), 此处占位全零 key */
     uint8_t zero_key[32] = { 0 };
-    int rc = mbedtls_gcm_setkey(&ctx, "aes", zero_key, 256);
+    int rc = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, zero_key, 256);
     if (rc != 0) {
         mbedtls_gcm_free(&ctx);
         return ESP_FAIL;
     }
     if (encrypt) {
-        rc = mbedtls_gcm_crypt_and_tag(NULL, &ctx, MBEDTLS_GCM_ENCRYPT, len,
+        rc = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT, len,
                                        nonce, 12, NULL, 0, in, out, 16, tag);
     } else {
         rc = mbedtls_gcm_auth_decrypt(&ctx, len, nonce, 12, NULL, 0, tag, 16, in, out);
