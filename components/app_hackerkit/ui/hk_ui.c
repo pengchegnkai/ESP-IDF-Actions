@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "ui_theme.h"
+
 #define HK_PAYLOADS_DIR "/sdcard/payloads"
 #define HK_UI_MAX_PAYLOADS 32
 
@@ -71,13 +73,16 @@ void hk_ui_create(lv_obj_t *parent, const hk_fs_ops_t *fs,
 
     lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    ui_theme_page(parent);
 
-    lv_obj_t *title = lv_label_create(parent);
-    lv_label_set_text(title, "HackerKit (BadUSB)");
+    lv_obj_t *title = ui_theme_title(parent, "HackerKit (BadUSB)", UI_ACCENT_HK);
 
-    /* payload 列表 */
+    /* payload 列表 (卡片化) */
     s_list = lv_list_create(parent);
     lv_obj_set_size(s_list, 300, 240);
+    lv_obj_set_style_bg_color(s_list, lv_color_hex(UI_CARD), 0);
+    lv_obj_set_style_radius(s_list, UI_RADIUS, 0);
+    lv_obj_set_style_border_width(s_list, 0, 0);
 
     char names[HK_UI_MAX_PAYLOADS][HK_PAYLOAD_NAME_MAX];
     int n = 0;
@@ -94,8 +99,10 @@ void hk_ui_create(lv_obj_t *parent, const hk_fs_ops_t *fs,
         }
     }
 
-    /* 执行按钮 */
+    /* 执行按钮 (强调色圆角) */
     lv_obj_t *btn = lv_button_create(parent);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_ACCENT_HK), 0);
+    lv_obj_set_style_radius(btn, UI_RADIUS, 0);
     lv_obj_t *btn_label = lv_label_create(btn);
     lv_label_set_text(btn_label, "Run");
     lv_obj_center(btn_label);
@@ -104,6 +111,7 @@ void hk_ui_create(lv_obj_t *parent, const hk_fs_ops_t *fs,
     /* 状态显示 (执行中/完成/失败/USB 占用) */
     s_status_label = lv_label_create(parent);
     lv_label_set_text(s_status_label, "Idle");
+    lv_obj_set_style_text_color(s_status_label, lv_color_hex(UI_TEXT_DIM), 0);
 }
 
 /* s_usb / s_delay_fn 供后续扩展 (如内联单步执行) 使用, 避免未用告警 */

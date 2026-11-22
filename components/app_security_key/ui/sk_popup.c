@@ -13,6 +13,8 @@
 #include "sk_popup.h"
 #include "lvgl.h"
 
+#include "ui_theme.h"
+
 #include <string.h>
 
 static lv_obj_t *s_mask;
@@ -66,6 +68,12 @@ void sk_popup_show(const char *origin, sk_confirm_cb_t cb, void *user_data)
     lv_obj_center(s_box);
     lv_obj_clear_flag(s_box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_all(s_box, 16, 0);
+    /* 主题: 深色卡片 + 强调色边框 */
+    lv_obj_set_style_bg_color(s_box, lv_color_hex(UI_CARD), 0);
+    lv_obj_set_style_radius(s_box, UI_RADIUS, 0);
+    lv_obj_set_style_border_width(s_box, 2, 0);
+    lv_obj_set_style_border_color(s_box, lv_color_hex(UI_ACCENT_SK), 0);
+    lv_obj_set_style_text_color(s_box, lv_color_hex(UI_TEXT), 0);
 
     lv_obj_t *title = lv_label_create(s_box);
     lv_label_set_text_fmt(title, "%s 网站请求使用你的安全密钥", s_origin);
@@ -76,6 +84,7 @@ void sk_popup_show(const char *origin, sk_confirm_cb_t cb, void *user_data)
     lv_obj_t *btn_ok = lv_btn_create(s_box);
     lv_obj_set_size(btn_ok, 140, 48);
     lv_obj_align(btn_ok, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(UI_ACCENT_SK), 0);
     lv_obj_set_user_data(btn_ok, (void *)(intptr_t)1);
     lv_obj_add_event_cb(btn_ok, btn_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *l_ok = lv_label_create(btn_ok);
@@ -85,6 +94,7 @@ void sk_popup_show(const char *origin, sk_confirm_cb_t cb, void *user_data)
     lv_obj_t *btn_no = lv_btn_create(s_box);
     lv_obj_set_size(btn_no, 140, 48);
     lv_obj_align(btn_no, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_set_style_bg_color(btn_no, lv_color_hex(UI_DANGER), 0);
     lv_obj_set_user_data(btn_no, (void *)(intptr_t)0);
     lv_obj_add_event_cb(btn_no, btn_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *l_no = lv_label_create(btn_no);

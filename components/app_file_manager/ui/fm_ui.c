@@ -12,6 +12,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "ui_theme.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -361,31 +363,47 @@ static void editor_save_cb(lv_event_t *e)
 static void build_pages(lv_obj_t *parent)
 {
     lv_obj_t *row, *btn, *lbl, *nav;
+    ui_theme_page(parent);
+    lv_obj_set_style_text_color(parent, lv_color_hex(UI_TEXT), 0);
 
     /* 浏览页 */
     s_ui.browser = lv_obj_create(parent);
     lv_obj_set_size(s_ui.browser, lv_pct(100), lv_pct(100));
     lv_obj_set_flex_flow(s_ui.browser, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_ui.browser, 4, 0);
+    lv_obj_set_style_bg_color(s_ui.browser, lv_color_hex(UI_BG), 0);
+    lv_obj_set_style_border_width(s_ui.browser, 0, 0);
+    lv_obj_set_style_text_color(s_ui.browser, lv_color_hex(UI_TEXT), 0);
 
     row = lv_obj_create(s_ui.browser);
     lv_obj_set_size(row, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_bg_color(row, lv_color_hex(UI_CARD), 0);
+    lv_obj_set_style_radius(row, UI_RADIUS, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
     s_ui.title = lv_label_create(row);
     lv_obj_set_flex_grow(s_ui.title, 1);
+    lv_obj_set_style_text_color(s_ui.title, lv_color_hex(UI_ACCENT_FM), 0);
     lv_label_set_text(s_ui.title, FM_ROOT_DIR);
     btn = lv_button_create(row);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_ACCENT_FM), 0);
     lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LV_SYMBOL_PLUS " New");
     lv_obj_add_event_cb(btn, new_btn_cb, LV_EVENT_CLICKED, NULL);
 
     s_ui.list = lv_list_create(s_ui.browser);
     lv_obj_set_size(s_ui.list, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(s_ui.list, lv_color_hex(UI_CARD), 0);
+    lv_obj_set_style_radius(s_ui.list, UI_RADIUS, 0);
+    lv_obj_set_style_border_width(s_ui.list, 0, 0);
 
     /* 预览页 */
     s_ui.preview = lv_obj_create(parent);
     lv_obj_set_size(s_ui.preview, lv_pct(100), lv_pct(100));
     lv_obj_set_flex_flow(s_ui.preview, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_bg_color(s_ui.preview, lv_color_hex(UI_BG), 0);
+    lv_obj_set_style_border_width(s_ui.preview, 0, 0);
+    lv_obj_set_style_text_color(s_ui.preview, lv_color_hex(UI_TEXT), 0);
     lv_obj_add_flag(s_ui.preview, LV_OBJ_FLAG_HIDDEN);
     s_ui.preview_label = lv_label_create(s_ui.preview);
     lv_obj_set_size(s_ui.preview_label, lv_pct(100), lv_pct(100));
@@ -413,11 +431,15 @@ static void build_pages(lv_obj_t *parent)
     s_ui.editor = lv_obj_create(parent);
     lv_obj_set_size(s_ui.editor, lv_pct(100), lv_pct(100));
     lv_obj_set_flex_flow(s_ui.editor, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_bg_color(s_ui.editor, lv_color_hex(UI_BG), 0);
+    lv_obj_set_style_border_width(s_ui.editor, 0, 0);
+    lv_obj_set_style_text_color(s_ui.editor, lv_color_hex(UI_TEXT), 0);
     lv_obj_add_flag(s_ui.editor, LV_OBJ_FLAG_HIDDEN);
     s_ui.textarea = lv_textarea_create(s_ui.editor);
     lv_obj_set_size(s_ui.textarea, lv_pct(100), lv_pct(100));
     lv_textarea_set_one_line(s_ui.textarea, false);
     btn = lv_button_create(s_ui.editor);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_ACCENT_FM), 0);
     lbl = lv_label_create(btn);
     lv_label_set_text(lbl, "Save");
     lv_obj_add_event_cb(btn, editor_save_cb, LV_EVENT_CLICKED, NULL);

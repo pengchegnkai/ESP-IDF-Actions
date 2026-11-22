@@ -16,6 +16,7 @@ idf_component_register(
         usb_arbiter
         brookesia_core
         esp_tinyusb
+        app_shared
     WHOLE_ARCHIVE
 )
 

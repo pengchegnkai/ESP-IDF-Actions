@@ -26,6 +26,7 @@ idf_component_register(
     REQUIRES
         board
         brookesia_core
+        app_shared
     WHOLE_ARCHIVE
 )
 

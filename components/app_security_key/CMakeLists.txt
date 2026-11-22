@@ -18,5 +18,6 @@ idf_component_register(
         brookesia_core     # Brookesia APP 注册 / LvLockGuard
         mbedtls            # AES-GCM (P4↔C6 通道加密; 密钥运算本体在 C6)
         esp_tinyusb        # FIDO2 CTAP-HID (attach/detach 驱动装卸)
+        app_shared         # 深色主题 (ui_theme.h)
     WHOLE_ARCHIVE          # 静态 app registrar (main 从 registry 安装)
 )
