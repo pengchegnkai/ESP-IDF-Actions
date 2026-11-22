@@ -3,7 +3,7 @@
  * 基于 espressif/esp_tinyusb v2 (idf_component.yml 声明 ^2.0.0),
  * 实现 hk_usb_ops_t::send_keyboard_report (6 键 rollover keyboard).
  *
- * 指令来源: /sdcard/payloads/*.txt (借鉴 EvilKey-firmware, USB Rubber Ducky 思路).
+ * 指令来源: /sdcard/payloads 目录下的 .txt 脚本 (借鉴 EvilKey-firmware, USB Rubber Ducky 思路).
  *
  * 集成时需要的 Kconfig 项 (由 lead 统一加, 本文件仅列出):
  *   CONFIG_TINYUSB_ENABLED=y
@@ -26,6 +26,7 @@
 
 #include "tinyusb.h"
 #include "tusb.h"
+#include "hid_device.h" /* tud_hid_ready / tud_hid_keyboard_report (CFG_TUD_HID≥1 时声明) */
 
 #include "esp_log.h"
 
@@ -72,7 +73,7 @@ static const uint8_t hk_hid_report_desc[] = {
 /* USB 设备描述符 (键盘伪装) */
 static const tusb_desc_device_t hk_desc_device = {
     .bLength            = sizeof(tusb_desc_device_t),
-    .bDescriptorType    = USB_DESC_TYPE_DEVICE,
+    .bDescriptorType    = TUSB_DESC_DEVICE,
     .bcdUSB             = HK_BCD_USB,
     .bDeviceClass       = 0x00,
     .bDeviceSubClass    = 0x00,
