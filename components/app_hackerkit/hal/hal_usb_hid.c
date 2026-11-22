@@ -26,6 +26,7 @@
 
 #include "tinyusb.h"
 #include "tusb.h"
+#include "tinyusb_default_config.h" /* TINYUSB_DEFAULT_CONFIG 起步配置宏 */
 #include "class/hid/hid_device.h" /* tud_hid_ready / tud_hid_keyboard_report (CFG_TUD_HID≥1 时声明) */
 
 #include "esp_log.h"
@@ -128,20 +129,18 @@ static void hal_send_keyboard_report(const uint8_t report[HK_REPORT_LEN])
     }
 }
 
-/* [硬件相关·需真机验证] TinyUSB 驱动安装 (HID 键盘) */
+/* [硬件相关·需真机验证] TinyUSB 驱动安装 (HID 键盘)
+ * v2.4.0 API: TINYUSB_DEFAULT_CONFIG() 起步 + descriptor 子结构覆写
+ * (官方 tusb_hid 示例同款用法). */
 esp_err_t hal_usb_hid_init(void)
 {
-    const tinyusb_config_t tusb_cfg = {
-        .device_descriptor = &hk_desc_device,
-        .string_descriptor = hk_string_desc,
-        .string_descriptor_count = sizeof(hk_string_desc) / sizeof(hk_string_desc[0]),
-        .external_phy = false,
-        /* P4 高速设备: full-speed / high-speed 配置描述符均指向同一数组,
-         * qualifier 不使用 (无独立 HS 描述符需求). */
-        .fs_configuration_descriptor = hk_desc_configuration,
-        .hs_configuration_descriptor = hk_desc_configuration,
-        .qualifier_descriptor = NULL,
-    };
+    tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
+    tusb_cfg.descriptor.device = &hk_desc_device;
+    tusb_cfg.descriptor.string = hk_string_desc;
+    tusb_cfg.descriptor.string_count = sizeof(hk_string_desc) / sizeof(hk_string_desc[0]);
+    /* P4 高速设备: full-speed / high-speed 配置描述符均指向同一数组 */
+    tusb_cfg.descriptor.full_speed_config = hk_desc_configuration;
+    tusb_cfg.descriptor.high_speed_config = hk_desc_configuration;
     esp_err_t err = tinyusb_driver_install(&tusb_cfg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "tinyusb_driver_install failed: %s", esp_err_to_name(err));

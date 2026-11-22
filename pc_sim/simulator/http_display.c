@@ -9,6 +9,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
@@ -48,6 +49,16 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
         last_state = (int)data->state;
     }
     (void)indev;
+}
+
+/* 诊断: 统计回调调用次数 (确认 indev 定时器在跑) */
+static int s_cb_calls;
+static void touch_read_cb_dbg(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    if (s_cb_calls++ < 3) {
+        fprintf(stderr, "[indev] cb 调用 #%d\n", s_cb_calls);
+    }
+    touch_read_cb(indev, data);
 }
 
 /* ---------------- BMP 编码 (RGB565 → 24bit) ---------------- */
@@ -203,8 +214,10 @@ int http_display_start(int w, int h)
 
     s_indev = lv_indev_create();
     lv_indev_set_type(s_indev, LV_INDEV_TYPE_POINTER);
-    lv_indev_set_read_cb(s_indev, touch_read_cb);
+    lv_indev_set_read_cb(s_indev, touch_read_cb_dbg);
     lv_indev_set_display(s_indev, d); /* 9.2+: 未关联 display 的 indev 不会被轮询 */
+    fprintf(stderr, "[http] indev=%p disp=%p default=%p\n",
+            (void *)s_indev, (void *)d, (void *)lv_display_get_default());
 
     struct sockaddr_in addr = { 0 };
     addr.sin_family = AF_INET;
@@ -213,6 +226,9 @@ int http_display_start(int w, int h)
     s_listen = socket(AF_INET, SOCK_STREAM, 0);
     int one = 1;
     setsockopt(s_listen, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    /* 非阻塞 accept: 主循环不被浏览器轮询节奏卡住 — 否则 LVGL 定时器/触摸
+     * 事件在两次浏览器请求之间得不到处理 (点击按下与抬起之间零轮询) */
+    fcntl(s_listen, F_SETFL, fcntl(s_listen, F_GETFL) | O_NONBLOCK);
     if (bind(s_listen, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(s_listen, 4) != 0) {
         perror("http bind");
         return -1;
