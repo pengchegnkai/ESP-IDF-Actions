@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # pc_sim — 主机侧仿真测试: 编译 + 运行 (Termux / Linux / CI 通用)
 # 编译 APP 的 core/+ui/ 纯逻辑源码, 用 stubs/ 替换硬件依赖.
 # LVGL UI 渲染测试: 需先 git clone --depth 1 --branch release/v9.5
