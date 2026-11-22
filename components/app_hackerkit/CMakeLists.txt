@@ -11,7 +11,7 @@ file(GLOB_RECURSE SRCS_CPP ${GLOB_OPTIONS} "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
 # WHOLE_ARCHIVE 保留静态 app registrar (main 从 registry 安装)
 idf_component_register(
     SRCS ${SRCS_C} ${SRCS_CPP}
-    INCLUDE_DIRS "." "core" "ui"
+    INCLUDE_DIRS "." "core" "ui" "hal"
     REQUIRES
         usb_arbiter
         brookesia_core

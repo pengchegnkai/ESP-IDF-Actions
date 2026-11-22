@@ -26,7 +26,7 @@
 
 #include "tinyusb.h"
 #include "tusb.h"
-#include "hid_device.h" /* tud_hid_ready / tud_hid_keyboard_report (CFG_TUD_HID≥1 时声明) */
+#include "class/hid/hid_device.h" /* tud_hid_ready / tud_hid_keyboard_report (CFG_TUD_HID≥1 时声明) */
 
 #include "esp_log.h"
 
