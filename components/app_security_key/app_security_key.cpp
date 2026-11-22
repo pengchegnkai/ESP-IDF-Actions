@@ -15,6 +15,9 @@
  */
 #include "esp_brookesia_app_security_key.hpp"
 
+/* assets/img_app_security_key.c — launcher 图标占位 */
+LV_IMG_DECLARE(img_app_security_key);
+
 #include <atomic>
 #include <cinttypes>
 
@@ -40,7 +43,7 @@ SecurityKey &SecurityKey::requestInstance(bool use_status_bar, bool use_navigati
 }
 
 SecurityKey::SecurityKey(bool use_status_bar, bool use_navigation_bar)
-    : systems::phone::App("SecurityKey", use_status_bar, use_navigation_bar) {}
+    : systems::phone::App("SecurityKey", &img_app_security_key, true, use_status_bar, use_navigation_bar) {}
 
 SecurityKey::~SecurityKey()
 {
@@ -121,7 +124,7 @@ bool SecurityKey::close(void)
 void SecurityKey::switch_event_cb(lv_event_t *e)
 {
     SecurityKey *self = static_cast<SecurityKey *>(lv_event_get_user_data(e));
-    lv_obj_t *sw = lv_event_get_target(e);
+    lv_obj_t *sw = (lv_obj_t *)lv_event_get_target(e);
     bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
     self->apply_switch(on);
 }

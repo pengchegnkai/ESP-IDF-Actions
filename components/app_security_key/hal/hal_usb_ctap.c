@@ -34,7 +34,7 @@ static const char *TAG = "sk_usb";
 /* ---------------- CTAP-HID 描述符 (bcd 0x0120, report 64B) ----------------
  * Usage Page = FIDO Alliance (0xFF1C), Usage = 0x01; Input/Output report
  * 均 65B (report id 1 + 64B data). */
-static const uint8_t s_fido_report_desc[] = {
+static const uint8_t s_fido_report_desc[] __attribute__((unused)) = {
     0x06, 0xD0, 0xF1, /* Usage Page (FIDO Alliance) */
     0x09, 0x01,       /* Usage (FIDO CTAP HID) */
     0xA1, 0x01,       /* Collection (Application) */

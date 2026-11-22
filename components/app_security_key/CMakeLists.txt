@@ -9,6 +9,7 @@ idf_component_register(
         "ui/sk_popup.c"
         "hal/hal_c6_crypto.c"
         "hal/hal_usb_ctap.c"
+        "assets/img_app_security_key.c"
         "app_security_key.cpp"
     INCLUDE_DIRS "." "core" "ui" "hal"
     REQUIRES
