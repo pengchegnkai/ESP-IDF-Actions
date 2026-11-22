@@ -1,0 +1,4 @@
+## App_SecurityKey (FIDO2 安全密钥) — 无外部依赖
+## TinyUSB/esp_hosted 由基座与 usb_arbiter 集成方提供 (见 hal/*.c 内 TODO)
+dependencies:
+  idf: ">=5.5"

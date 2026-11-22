@@ -35,3 +35,11 @@ Thumbs.db
 *.Zone.Identifier
 
 # Music under spiffs/music is part of the factory storage image.
+
+# pc_sim 本地产物
+pc_sim/lvgl/
+pc_sim/build/
+pc_sim/sim_fs/
+pc_sim/fm_*test_*/
+pc_sim/fm_payload_test_*/
+pc_sim/fm_host_trav_*/

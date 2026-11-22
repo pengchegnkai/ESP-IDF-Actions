@@ -1,0 +1,6 @@
+## App_HackerKit 组件依赖
+## esp_tinyusb: 注册表组件 (managed component), v2 API
+## 参考 IDF v5.5 官方 TinyUSB HID 示例 (periph_tusb_hid)
+dependencies:
+  idf: ">=5.0"
+  espressif/esp_tinyusb: "^2.0.0"

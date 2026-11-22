@@ -95,3 +95,22 @@ jobs:
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
           if-no-files-found: error
+
+  # 模拟先行门禁: APP 纯逻辑层 (core/ui) 主机仿真测试 — 烧录前的机器验证层
+  pc-sim-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run pc_sim host tests (no ESP-IDF needed)
+        run: |
+          cd pc_sim
+          ./run_tests.sh
+
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-sim-test-log
+          path: pc_sim/build/
+          if-no-files-found: warn

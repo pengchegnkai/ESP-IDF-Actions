@@ -1,0 +1,21 @@
+menu "C6 RF Coexistence Test"
+
+config C6_RF_TEST_ENABLED
+    bool "Enable C6 RF coexistence test framework (P4 host side)"
+    default n
+    help
+        Compile the c6_rf_test component's active implementation.
+        Keep n for the factory firmware; enable explicitly in CI as a
+        compile gate and on-device during the flashing window.
+
+config C6_RF_TEST_ENABLE_BLE
+    bool "Include BLE scan test path"
+    depends on C6_RF_TEST_ENABLED
+    default n
+    help
+        Requires esp_hosted >= 2.x with host BT feature
+        (CONFIG_ESP_HOSTED_HOST_FEAT_BT) and a rebuilt C6 coprocessor
+        firmware with CONFIG_ESP_HOSTED_CP_FEAT_BT — do in the flashing
+        window only.
+
+endmenu
