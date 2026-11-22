@@ -61,7 +61,19 @@ static fm_row_t s_rows[FM_ROWS_MAX];
 
 static void join_path(char *dst, size_t size, const char *dir, const char *name)
 {
-    snprintf(dst, size, "%s/%s", dir, name);
+    /* 手工拼接: 消除 -Werror=format-truncation 对 snprintf 的告警 */
+    size_t dn = strlen(dir);
+    if (dn >= size) dn = size - 1; /* 极长 dir 防御性截断 */
+    memcpy(dst, dir, dn);
+    dst[dn++] = '/';
+    if (dn < size) {
+        size_t rn = strlen(name);
+        if (rn > size - dn - 1) rn = size - dn - 1;
+        memcpy(dst + dn, name, rn);
+        dst[dn + rn] = '\0';
+    } else {
+        dst[dn] = '\0';
+    }
 }
 
 static void tx_free(void)
@@ -304,7 +316,7 @@ static void browser_open(const char *dir)
         slot = 1;
     }
     for (i = 0; i < n && slot < FM_ROWS_MAX; i++, slot++) {
-        snprintf(s_rows[slot].name, sizeof(s_rows[slot].name), "%s", entries[i].name);
+        memcpy(s_rows[slot].name, entries[i].name, sizeof(entries[i].name));
         s_rows[slot].is_dir = entries[i].is_dir;
         list_add_row(&entries[i], slot, dir);
     }
