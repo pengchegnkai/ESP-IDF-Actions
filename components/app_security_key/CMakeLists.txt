@@ -17,5 +17,6 @@ idf_component_register(
         board              # C6 协处理器信息 (board_wifi)
         brookesia_core     # Brookesia APP 注册 / LvLockGuard
         mbedtls            # AES-GCM (P4↔C6 通道加密; 密钥运算本体在 C6)
+        esp_tinyusb        # FIDO2 CTAP-HID (attach/detach 驱动装卸)
     WHOLE_ARCHIVE          # 静态 app registrar (main 从 registry 安装)
 )

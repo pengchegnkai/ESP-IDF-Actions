@@ -28,6 +28,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "mbedtls/gcm.h"
+#include "mbedtls/md.h"
+/* 注: 不用 mbedtls/hkdf.h — IDF 默认关闭 MBEDTLS_HKDF_C, 手写 HKDF (下方) */
 
 #ifndef SK_C6_LINK_HOSTED2
 #define SK_C6_LINK_HOSTED2 0
@@ -84,6 +86,44 @@ typedef struct {
 static sk_c6_t s_c6;
 static sk_crypto_backend_t s_backend;
 
+/* ---------------- HKDF-SHA256 (手写, IDF 默认不开 MBEDTLS_HKDF_C) ---------------- */
+static int hkdf_sha256(const uint8_t *salt, size_t salt_len,
+                       const uint8_t *ikm, size_t ikm_len,
+                       const uint8_t *info, size_t info_len,
+                       uint8_t *out, size_t out_len)
+{
+    const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (!md) return -1;
+
+    /* Extract: PRK = HMAC(salt, ikm); salt 缺省全零 (RFC 5869) */
+    uint8_t prk[32], zeros[32] = { 0 };
+    if (!salt) { salt = zeros; salt_len = 32; }
+    if (mbedtls_md_hmac(md, salt, salt_len, ikm, ikm_len, prk) != 0) return -1;
+
+    /* Expand: T(i) = HMAC(PRK, T(i-1) || info || i) */
+    uint8_t t[32];
+    size_t t_len = 0, pos = 0;
+    uint8_t counter = 1;
+    while (pos < out_len) {
+        mbedtls_md_hmac_ctx_t h;
+        mbedtls_md_hmac_init(&h);
+        if (mbedtls_md_hmac_setup(&h, md) != 0 ||
+            mbedtls_md_hmac_update(&h, t, t_len) != 0 ||
+            mbedtls_md_hmac_update(&h, info, info_len) != 0 ||
+            mbedtls_md_hmac_update(&h, &counter, 1) != 0 ||
+            mbedtls_md_hmac_finish(&h, t) != 0) {
+            mbedtls_md_hmac_free(&h);
+            return -1;
+        }
+        mbedtls_md_hmac_free(&h);
+        size_t take = (out_len - pos < 32) ? (out_len - pos) : 32;
+        memcpy(out + pos, t, take);
+        pos += take;
+        counter++;
+    }
+    return 0;
+}
+
 /* ---------------- PSK 派生: HKDF-SHA256(mac_p4 || mac_c6, salt, key_id) ---------------- */
 static int psk_derive(void)
 {
@@ -92,10 +132,8 @@ static int psk_derive(void)
     memcpy(ikm, s_c6.mac_self, SK_MAC_LEN);
     memcpy(ikm + SK_MAC_LEN, s_c6.mac_peer, SK_MAC_LEN);
 
-    const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    int rc = mbedtls_hkdf(md, salt, sizeof(salt) - 1, ikm, sizeof(ikm),
-                          NULL, 0, (uint8_t *)s_c6.gcm_key, SK_PSK_LEN);
-    return rc;
+    return hkdf_sha256(salt, sizeof(salt) - 1, ikm, sizeof(ikm),
+                       NULL, 0, (uint8_t *)s_c6.gcm_key, SK_PSK_LEN);
 }
 
 /* ---------------- AES-GCM 帧加解密 ([纯逻辑] 已修 mbedtls API) ---------------- */
@@ -246,10 +284,9 @@ static int c6_derive_session_key(void *ctx, const uint8_t *nonce, size_t nonce_l
     (void)ctx;
     if (!nonce || nonce_len == 0 || !key || key_len == 0) return -1;
     /* 会话密钥 = HKDF(PSK, salt=nonce, info="session") — 替代 0xA5 占位 */
-    const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    return mbedtls_hkdf(md, nonce, nonce_len,
-                        (const uint8_t *)s_c6.gcm_key, SK_PSK_LEN,
-                        (const uint8_t *)"session", 7, key, key_len) == 0 ? 0 : -1;
+    return hkdf_sha256(nonce, nonce_len,
+                       (const uint8_t *)s_c6.gcm_key, SK_PSK_LEN,
+                       (const uint8_t *)"session", 7, key, key_len) == 0 ? 0 : -1;
 }
 
 /* ---------------- 对外 ---------------- */
