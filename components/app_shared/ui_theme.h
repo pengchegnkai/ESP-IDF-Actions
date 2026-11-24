@@ -21,6 +21,7 @@ extern "C" {
 #define UI_ACCENT_FM   0x3D9BFF /* FileManager 蓝 */
 #define UI_ACCENT_HK   0xB45AFF /* HackerKit 紫 */
 #define UI_ACCENT_SK   0x35C4C4 /* SecurityKey 青 */
+#define UI_ACCENT_ADB  0x35C4C4 /* ADB 工具 青 (与 SK 同族) */
 #define UI_DANGER      0xE05252 /* 危险操作 */
 
 /* 半径/间距 */
