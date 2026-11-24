@@ -20,6 +20,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include "mbedtls/md.h"
 
 #include "usb/usb_host.h"
 
@@ -50,27 +51,13 @@ static volatile usb_transfer_status_t s_out_status;
 
 /* ---------------- 前置 ---------------- */
 static void adb_handshake(void);
-static void adb_rx_process(const uint8_t *data, size_t len);
+static void in_xfer_done_cb(usb_transfer_t *t);
 
 /* ---------------- USB transfer 完成回调 ---------------- */
 static void out_done_cb(usb_transfer_t *t)
 {
     s_out_status = t->status;
     xSemaphoreGive(s_out_done);
-}
-
-/* IN transfer 完成: 解析 ADB 报文并重新挂起 (常驻收包) */
-static void in_done_cb(usb_transfer_t *t)
-{
-    if (t->status == USB_TRANSFER_STATUS_COMPLETED && s_running) {
-        adb_rx_process(t->data_buffer, t->actual_num_bytes);
-        /* 重新挂起 */
-        if (s_dev_open) {
-            usb_host_transfer_submit(t);
-        }
-    } else if (s_dev_open && s_running) {
-        usb_host_transfer_submit(t); /* 短包/超时: 继续挂 */
-    }
 }
 
 static int adb_send_v2(uint32_t cmd, uint32_t a0, uint32_t a1,
@@ -111,13 +98,6 @@ static int adb_send_v2(uint32_t cmd, uint32_t a0, uint32_t a1,
 }
 
 /* ---------------- 收包处理 ---------------- */
-static void adb_rx_process(const uint8_t *data, size_t len)
-{
-    (void)data;
-    (void)len;
-    /* IN transfer 的实际处理在 in_xfer_done_cb 中 (有 data_buffer) */
-}
-
 static void in_xfer_done_cb(usb_transfer_t *t)
 {
     if (!s_running) return;
@@ -138,6 +118,27 @@ static void in_xfer_done_cb(usb_transfer_t *t)
                     s_line_cb("[adb] 已授权, 连接就绪", s_line_user);
                 }
                 s_ready = true;
+                break;
+            case ADB_CMD_AUTH:
+                if (hdr.arg0 == 1) {
+                    /* AUTH RSAPUBLICKEY: 回 "host:"+b64(SPKI) 让手机弹授权 */
+                    uint8_t pubkey[ADB_MAX_PAYLOAD];
+                    int pklen = adb_rsa_pubkey_adb(pubkey, sizeof(pubkey));
+                    if (pklen > 0) {
+                        adb_send_v2(ADB_CMD_AUTH, 1, 0, pubkey, pklen);
+                    }
+                } else if (hdr.arg0 == 2) {
+                    /* AUTH SIGNATURE: 手机送 token, 签 SHA1(token) 回传 */
+                    uint8_t digest[20];
+                    uint8_t sig[256];
+                    size_t sig_len = sizeof(sig);
+                    const mbedtls_md_info_t *md =
+                        mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
+                    mbedtls_md(md, payload, hdr.data_len, digest);
+                    if (adb_rsa_sign(digest, sizeof(digest), sig, &sig_len) == 0) {
+                        adb_send_v2(ADB_CMD_AUTH, 2, 0, sig, sig_len);
+                    }
+                }
                 break;
             case ADB_CMD_OKAY:
                 s_remote_id = hdr.arg1 ? hdr.arg1 : hdr.arg0;
@@ -191,9 +192,9 @@ static void client_event_cb(const usb_host_client_event_msg_t *msg, void *arg)
 {
     (void)arg;
     if (msg->event == USB_HOST_CLIENT_EVENT_NEW_DEV) {
-        s_dev_addr = msg->new_dev.dev_addr;
-        ESP_LOGI(TAG, "new device addr=%u", s_dev_addr);
-        if (usb_host_device_open(s_client, s_dev_addr, &s_dev) != ESP_OK) {
+        /* v5.5: 事件只给 new_dev.address, 用它打开设备 */
+        ESP_LOGI(TAG, "new device addr=%u", msg->new_dev.address);
+        if (usb_host_device_open(s_client, msg->new_dev.address, &s_dev) != ESP_OK) {
             s_dev = NULL;
             return;
         }
@@ -205,54 +206,62 @@ static void client_event_cb(const usb_host_client_event_msg_t *msg, void *arg)
         s_xfer_in->callback = in_xfer_done_cb;
         s_xfer_out->device_handle = s_dev;
         s_xfer_out->callback = out_done_cb;
-        /* 枚举 ADB 接口在 USB_HOST_CLIENT_EVENT 前必须先拿描述符——简化:
-         * 设备级打开后靠默认端点? 不行——必须 claim 接口. 用先拿描述符再 claim. */
-        {
-            const usb_device_desc_t *dev_desc = NULL;
-            const usb_config_desc_t *cfg_desc = NULL;
-            usb_host_get_device_descriptor(s_client, s_dev_addr, &dev_desc);
-            usb_host_get_active_config_descriptor(s_client, s_dev_addr, &cfg_desc);
-            int cfg_idx = -1, itf_idx = -1;
-            const usb_intf_desc_t *itf = usb_parse_interface_descriptor(
-                cfg_desc, 0, 0, &itf_idx);
-            /* 找 class 0x42/0x01/0x01 */
-            for (int i = 0; i < cfg_desc->bNumInterfaces && itf; i++) {
-                itf = usb_parse_interface_descriptor(cfg_desc, i, 0, &itf_idx);
-                if (itf->bInterfaceClass == 0x42 && itf->bInterfaceSubClass == 0x01 &&
-                    itf->bInterfaceProtocol == 0x01) {
-                    break;
-                }
-                itf = NULL;
-            }
-            if (!itf) {
-                ESP_LOGW(TAG, "not an ADB device");
-                s_dev_open = false;
-                usb_host_device_close(s_client, s_dev);
-                s_dev = NULL;
-                return;
-            }
-            s_itf_num = itf->bInterfaceNumber;
-            usb_host_interface_open(s_client, s_dev, s_itf_num, 0);
-            /* 找 bulk EP */
-            int ep_idx = 0;
-            const usb_ep_desc_t *ep = usb_parse_endpoint_descriptor_by_index(
-                itf, ep_idx, cfg_desc);
-            while (ep) {
-                if (usb_transfer_is_bulk(ep)) {
-                    if (ep->bEndpointAddress & 0x80) {
-                        s_xfer_in->bEndpointAddress = ep->bEndpointAddress;
-                    } else {
-                        s_ep_out_addr = ep->bEndpointAddress;
-                    }
-                }
-                ep = usb_parse_endpoint_descriptor_by_index(itf, ++ep_idx, cfg_desc);
-            }
-            /* 挂起常驻 IN */
-            s_xfer_in->num_bytes = ADB_HDR_SZ + ADB_MAX_PAYLOAD;
-            usb_host_transfer_submit(s_xfer_in);
-            /* 握手 */
-            adb_handshake();
+
+        /* 描述符 (v5.5: (dev_hdl, &desc) 两参) */
+        const usb_config_desc_t *cfg_desc = NULL;
+        usb_host_get_active_config_descriptor(s_dev, &cfg_desc);
+        if (!cfg_desc) {
+            ESP_LOGW(TAG, "no config descriptor");
+            s_dev_open = false;
+            usb_host_device_close(s_client, s_dev);
+            s_dev = NULL;
+            return;
         }
+        /* 手动遍历接口描述符, 找 ADB (0x42/0x01/0x01) */
+        const usb_intf_desc_t *itf = NULL;
+        int offset = cfg_desc->bLength;
+        while (offset < cfg_desc->wTotalLength) {
+            const usb_intf_desc_t *d =
+                (const usb_intf_desc_t *)((const uint8_t *)cfg_desc + offset);
+            if (d->bLength == 0) {
+                break;
+            }
+            if (d->bDescriptorType == 0x04 && /* INTERFACE */
+                d->bInterfaceClass == 0x42 && d->bInterfaceSubClass == 0x01 &&
+                d->bInterfaceProtocol == 0x01) {
+                itf = d;
+                break;
+            }
+            offset += d->bLength;
+        }
+        if (!itf) {
+            ESP_LOGW(TAG, "not an ADB device");
+            s_dev_open = false;
+            usb_host_device_close(s_client, s_dev);
+            s_dev = NULL;
+            return;
+        }
+        s_itf_num = itf->bInterfaceNumber;
+        usb_host_interface_claim(s_client, s_dev, s_itf_num, 0);
+        /* 找 bulk EP (usb_parse_endpoint_descriptor_by_index(itf, idx, wTotalLength, &off)) */
+        int ep_off = 0;
+        for (int p = 0; p < itf->bNumEndpoints; p++) {
+            const usb_ep_desc_t *ep = usb_parse_endpoint_descriptor_by_index(
+                itf, p, cfg_desc->wTotalLength, &ep_off);
+            if (!ep) break;
+            if ((ep->bmAttributes & 0x03) == 0x02) { /* BULK */
+                if (ep->bEndpointAddress & 0x80) {
+                    s_xfer_in->bEndpointAddress = ep->bEndpointAddress;
+                } else {
+                    s_ep_out_addr = ep->bEndpointAddress;
+                }
+            }
+        }
+        /* 挂起常驻 IN */
+        s_xfer_in->num_bytes = ADB_HDR_SZ + ADB_MAX_PAYLOAD;
+        usb_host_transfer_submit(s_xfer_in);
+        /* 握手 */
+        adb_handshake();
     } else if (msg->event == USB_HOST_CLIENT_EVENT_DEV_GONE) {
         ESP_LOGW(TAG, "device gone");
         s_dev_open = false;
