@@ -9,6 +9,6 @@ idf_component_register(
         "assets/img_app_adbtool.c"
         "app_adbtool.cpp"
     INCLUDE_DIRS "core" "ui"
-    REQUIRES mbedtls nvs_flash usb freertos brookesia_core app_shared
+    REQUIRES mbedtls nvs_flash usb freertos brookesia_core app_shared esp_tinyusb
     WHOLE_ARCHIVE
 )
