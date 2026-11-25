@@ -24,6 +24,10 @@ int adb_client_init(void);
 int adb_client_start(void);
 void adb_client_stop(void);
 
+/* shell 输出/状态回调 (USB host 任务上下文调用) */
+typedef void (*adb_line_cb_t)(const char *line, void *user);
+int adb_client_set_line_cb(adb_line_cb_t cb, void *user);
+
 /* 就绪后执行一条 shell 命令 (异步, 输出走 line 回调); 返回 0 = 已提交 */
 int adb_client_shell(const char *cmd);
 

@@ -140,7 +140,7 @@ void AdbTool::status_poll(lv_timer_t *t)
 // The app is a singleton owned by itself; the registry must not delete it.
 ESP_UTILS_REGISTER_PLUGIN_WITH_CONSTRUCTOR(systems::base::App, AdbTool, "ADB 工具", []()
 {
-    return std::shared_ptr<AdbTool>(AdbTool::requestInstance(), [](AdbTool *) {});
+    return std::shared_ptr<AdbTool>(&AdbTool::requestInstance(), [](AdbTool *) {});
 })
 
 } // namespace esp_brookesia::apps
