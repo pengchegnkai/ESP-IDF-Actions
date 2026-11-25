@@ -45,7 +45,7 @@ int adb_rsa_init(void)
     size_t len = sizeof(buf);
     esp_err_t err = nvs_get_blob(h, "rsakey", buf, &len);
     if (err == ESP_OK && len <= sizeof(buf)) {
-        if (mbedtls_pk_parse_pk(&s_rsa, buf, len) == 0) {
+        if (mbedtls_pk_parse_key(&s_rsa, buf, len, NULL, 0) == 0) {
             s_rsa_ready = 1;
             nvs_close(h);
             ESP_LOGI(TAG, "RSA2048 key loaded from NVS");
