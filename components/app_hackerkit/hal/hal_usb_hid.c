@@ -146,6 +146,11 @@ esp_err_t hal_usb_hid_init(void)
         ESP_LOGE(TAG, "tinyusb_driver_install failed: %s", esp_err_to_name(err));
         return err;
     }
+    /* 注册键盘报告描述符 (GET_DESCRIPTOR(Report) 回调在 adb_client.c 统一返回) */
+    {
+        extern uint8_t const *__hid_report_desc;
+        __hid_report_desc = hk_hid_report_desc;
+    }
     ESP_LOGI(TAG, "TinyUSB HID keyboard ready (VID=0x%04X PID=0x%04X)", HK_VID, HK_PID);
     return ESP_OK;
 }

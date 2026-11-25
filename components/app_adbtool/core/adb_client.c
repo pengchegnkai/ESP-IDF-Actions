@@ -40,6 +40,11 @@ static volatile bool s_dev_open;      /* 设备已打开且接口已 claim */
 static adb_line_cb_t s_line_cb;
 static void *s_line_user;
 
+/* 当前激活 HID 消费者的报告描述符与 OUT 收包入口
+ * (FIDO: hal_usb_ctap.c attach 时设置; BadUSB: hal_usb_hid.c init 时设置) */
+uint8_t const *__hid_report_desc;
+void (*__hid_rx_fn)(const uint8_t *buf, size_t len);
+
 static volatile uint32_t s_local_id = 1;
 static volatile uint32_t s_remote_id;
 static char s_line_buf[ADB_MAX_PAYLOAD];
@@ -328,4 +333,35 @@ int adb_client_set_line_cb(adb_line_cb_t cb, void *user)
     s_line_cb = cb;
     s_line_user = user;
     return 0;
+}
+
+/* ---------------- TinyUSB HID class 回调 ([硬件相关·需真机验证]) ----------------
+ * 全固件唯一定义点: FIDO (app_security_key) 与 BadUSB 键盘 (app_hackerkit)
+ * 互斥使用 HID, 由 usb_arbiter 切换时更新 __hid_report_desc 指向各自的报告描述符. */
+
+uint8_t const *__hid_report_desc;
+
+uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
+{
+    (void)instance;
+    return __hid_report_desc;
+}
+
+uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
+                               uint8_t *buffer, uint16_t reqlen)
+{
+    (void)instance; (void)report_id; (void)report_type;
+    memset(buffer, 0, reqlen);
+    return (uint16_t)reqlen;
+}
+
+void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
+                           uint8_t const *buffer, uint16_t bufsize)
+{
+    (void)instance; (void)report_id; (void)report_type;
+    if (bufsize == 0) return;
+    /* 路由到当前激活的 HID 消费者 (FIDO CTAP demux 等) */
+    if (__hid_rx_fn) {
+        __hid_rx_fn(buffer, bufsize);
+    }
 }

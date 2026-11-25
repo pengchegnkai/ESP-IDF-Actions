@@ -132,6 +132,11 @@ int hal_usb_ctap_attach(void)
         return -1;
     }
     s_usb.attached = true;
+    /* 注册当前 HID 报告描述符 + OUT 收包路由 (回调唯一定义点在 adb_client.c) */
+    extern uint8_t const *__hid_report_desc;
+    extern void (*__hid_rx_fn)(const uint8_t *buf, size_t len);
+    __hid_report_desc = s_fido_report_desc;
+    __hid_rx_fn = ctap_rx_route;
     ESP_LOGI(TAG, "FIDO2 CTAP-HID attached");
     return 0;
 }
@@ -185,11 +190,5 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
     return (uint16_t)reqlen;
 }
 
-/* SET_REPORT (control endpoint) 与 interrupt OUT 共用同一解包路径 */
-void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
-                           uint8_t const *buffer, uint16_t bufsize)
-{
-    (void)instance; (void)report_id; (void)report_type;
-    if (bufsize == 0) return;
-    usb_ctap_report_in(buffer);
-}
+/* SET_REPORT/GET_REPORT 回调唯一定义点在 app_adbtool/core/adb_client.c,
+ * FIDO 收包经 __hid_rx_fn 路由到 usb_ctap_report_in (attach 时注册). */
