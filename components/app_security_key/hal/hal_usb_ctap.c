@@ -186,16 +186,5 @@ int hal_usb_ctap_send(uint32_t cid, const uint8_t *msg, size_t len)
     return 0;
 }
 
-/* ---------------- TinyUSB HID class 回调 (weak 覆盖, 全固件唯一定义) ---------------- */
-
-/* GET_REPORT: CTAP-HID 规范要求返回当前待发送数据; 简化为空帧. */
-uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
-                               uint8_t *buffer, uint16_t reqlen)
-{
-    (void)instance; (void)report_id; (void)report_type;
-    memset(buffer, 0, reqlen);
-    return (uint16_t)reqlen;
-}
-
 /* SET_REPORT/GET_REPORT 回调唯一定义点在 app_adbtool/core/adb_client.c,
  * FIDO 收包经 __hid_rx_fn 路由到 usb_ctap_report_in (attach 时注册). */
