@@ -206,7 +206,7 @@ void SecurityKey::origin_from_msg(char *buf, size_t cap, const uint8_t *msg, siz
 // The app is a singleton owned by itself; the registry must not delete it.
 ESP_UTILS_REGISTER_PLUGIN_WITH_CONSTRUCTOR(systems::base::App, SecurityKey, "SecurityKey", []()
 {
-    return std::shared_ptr<SecurityKey>(SecurityKey::requestInstance(), [](SecurityKey *) {});
+    return std::shared_ptr<SecurityKey>(&SecurityKey::requestInstance(), [](SecurityKey *) {});
 })
 
 } // namespace esp_brookesia::apps
