@@ -108,6 +108,13 @@ static void usb_ctap_report_in(const uint8_t report[CTAPHID_REPORT_SZ])
     }
 }
 
+/* HID 回调路由包装 (签名对齐 __hid_rx_fn, 定义点在 adb_client.c) */
+static void ctap_rx_route(const uint8_t *buf, size_t len)
+{
+    if (len != CTAPHID_REPORT_SZ) return;
+    usb_ctap_report_in(buf);
+}
+
 int hal_usb_ctap_attach(void)
 {
     /* 红线③: 只有 arbiter 判定 FIDO2 持有 USB 时才允许挂载 */
