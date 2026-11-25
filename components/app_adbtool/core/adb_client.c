@@ -23,6 +23,7 @@
 #include "mbedtls/md.h"
 
 #include "usb/usb_host.h"
+#include "class/hid/hid_device.h" /* hid_report_type_t / tud_hid_* 回调签名 */
 
 static const char *TAG = "adbtool";
 
